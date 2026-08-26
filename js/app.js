@@ -10,6 +10,7 @@ const state = {
   selectedLevel: '',
   selectedClass: '',
   selectedAssignment: '',
+  selectedPreviewStudent: '',
   submissions: [],
   scoreTable: null
 };
@@ -18,6 +19,7 @@ const PAGE_TITLES = {
   assignments: 'คำสั่งงาน',
   reviewAll: 'ตรวจงานรวม',
   reviewOne: 'ตรวจงานรายบุคคล',
+  studentView: 'มุมมองนักเรียน',
   scoreTable: 'ตารางคะแนน',
   settings: 'อื่นๆ',
   studentWork: 'งานของฉัน',
@@ -33,12 +35,31 @@ function csv(v) { return String(v || '').split(',').map(x => x.trim()).filter(Bo
 function showToast(msg) { const t=$('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3500); }
 function setLoading(msg='กำลังโหลด...') { $('content').innerHTML = `<div class="hero-empty">${escapeHtml(msg)}</div>`; }
 
+function normalizeHexColor(value, fallback='#22C55E') {
+  const raw = String(value || '').trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(raw)) return raw.toUpperCase();
+  return fallback;
+}
+
+function hexToRgb(hex) {
+  const safe = normalizeHexColor(hex).replace('#', '');
+  return [parseInt(safe.slice(0, 2), 16), parseInt(safe.slice(2, 4), 16), parseInt(safe.slice(4, 6), 16)];
+}
+
 function applyTheme(user) {
-  const accent = user?.AccentColor || '#22C55E';
-  const bg = user?.BackgroundColor || '#000000';
+  const accent = normalizeHexColor(user?.AccentColor || '#22C55E');
+  const bg = normalizeHexColor(user?.BackgroundColor || '#000000', '#000000');
+  const [r, g, b] = hexToRgb(accent);
   document.documentElement.style.setProperty('--accent', accent);
   document.documentElement.style.setProperty('--line', accent);
+  document.documentElement.style.setProperty('--accent-rgb', `${r}, ${g}, ${b}`);
   document.documentElement.style.setProperty('--bg', bg);
+  document.documentElement.style.setProperty('--toolbar-bg', `rgba(${r}, ${g}, ${b}, .34)`);
+  document.documentElement.style.setProperty('--toolbar-border', `rgba(${r}, ${g}, ${b}, .96)`);
+  document.documentElement.style.setProperty('--layout-panel-bg', `rgba(${r}, ${g}, ${b}, .24)`);
+  document.documentElement.style.setProperty('--score-head-bg', `rgba(${r}, ${g}, ${b}, .52)`);
+  document.documentElement.style.setProperty('--score-name-bg', `rgba(${r}, ${g}, ${b}, .28)`);
+  document.documentElement.style.setProperty('--score-cell-bg', `rgba(${r}, ${g}, ${b}, .13)`);
   if (user?.BackgroundImageURL) {
     document.body.classList.add('with-bg-image');
     document.body.style.backgroundImage = `linear-gradient(rgba(0,0,0,.72), rgba(0,0,0,.72)), url('${user.BackgroundImageURL}')`;
@@ -99,6 +120,7 @@ async function refreshBootstrap(show=true) {
   try {
     const b = await apiGet({ action: 'bootstrap', userId: state.user.UserID, role: state.user.Role });
     consumeBootstrap(b);
+    if (b.user) { state.user = b.user; applyTheme(state.user); }
     localStorage.setItem(SESSION_KEY, JSON.stringify({ user: state.user, bootstrap: b, savedAt: Date.now() }));
     renderCurrentPage();
     if (show) showToast('รีเฟรชข้อมูลแล้ว');
@@ -131,6 +153,7 @@ function renderCurrentPage() {
   if (page === 'assignments') return renderAssignmentsPage();
   if (page === 'reviewAll') return renderReviewAllPage();
   if (page === 'reviewOne') return renderReviewOnePage();
+  if (page === 'studentView') return renderStudentViewPage();
   if (page === 'scoreTable') return renderScoreTablePage();
   if (page === 'settings') return renderSettingsPage();
   if (page === 'studentWork') return renderStudentPage(false);
@@ -155,6 +178,13 @@ function assignmentOptions(level='', selected='') {
   return `<option value="">เลือกใบงาน</option>` + arr.map(a => `<option ${a.AssignmentID===selected?'selected':''} value="${escapeHtml(a.AssignmentID)}">${escapeHtml(a.Topic)} (${escapeHtml(a.AssignmentID)})</option>`).join('');
 }
 function getAssignment(id) { return state.assignments.find(a => a.AssignmentID === id); }
+function studentOptions(level='', className='', selected='') {
+  const arr = state.students
+    .filter(u => (!level || u.Level === level) && (!className || u.ClassName === className))
+    .sort((a, b) => Number(a.No || 9999) - Number(b.No || 9999));
+  return `<option value="">เลือกนักเรียน</option>` + arr.map(u => `<option ${u.UserID===selected?'selected':''} value="${escapeHtml(u.UserID)}">เลขที่ ${escapeHtml(u.No || '-')} - ${escapeHtml(u.Name)} (${escapeHtml(u.UserID)})</option>`).join('');
+}
+function getStudent(id) { return state.students.find(u => u.UserID === id); }
 
 function renderAssignmentsPage() {
   $('pageToolbar').innerHTML = `
@@ -172,7 +202,6 @@ function renderAssignmentCard(a) {
   const inactive = a.Status === 'ปิดใช้งาน';
   const preview = a.WorksheetVisible === true || a.WorksheetVisible === 'TRUE' || a.WorksheetVisible === 'TRUE' || a.WorksheetVisible === 'จริง';
   return `<article class="layout-card" data-assignment="${escapeHtml(a.AssignmentID)}">
-    <div class="slot-note">(ช่องต่อ 1 งาน)</div>
     <div class="work-preview" id="worksheetBox_${escapeHtml(a.AssignmentID)}">
       ${preview && a.WorksheetURL ? drivePreview(a.WorksheetURL, 'ใบงาน') : '<strong>ใบงาน</strong>'}
     </div>
@@ -185,11 +214,9 @@ function renderAssignmentCard(a) {
       <div><b>คำอธิบาย:</b><br>${escapeHtml(a.Description || 'ไม่มีคำอธิบาย')}</div>
       <div class="detail-actions">
         <button onclick="toggleWorksheet('${a.AssignmentID}')">แสดง/ซ่อนใบงาน</button>
-        <button onclick="showAssignmentInfo('${a.AssignmentID}')">คำสั่งใบงาน</button>
         ${a.WorksheetURL ? `<button onclick="window.open('${escapeHtml(a.WorksheetURL)}','_blank')">เปิดใบงาน</button>` : ''}
         <button class="${inactive?'':'warn'}" onclick="toggleAssignmentStatus('${a.AssignmentID}', '${inactive?'เปิดใช้งาน':'ปิดใช้งาน'}')">${inactive?'เปิดใช้งาน':'ปิดการใช้งาน'}</button>
       </div>
-      <small>ปิดการใช้งาน = นักเรียนจะส่งงานเพิ่มไม่ได้ แต่ข้อมูลเดิมยังอยู่</small>
     </div>
   </article>`;
 }
@@ -341,6 +368,61 @@ async function loadIndividualWork() {
   await loadSubmissions({ search });
 }
 
+function renderStudentViewPage() {
+  const selectedStudent = getStudent(state.selectedPreviewStudent);
+  $('pageToolbar').innerHTML = `
+    <select onchange="state.selectedLevel=this.value; state.selectedClass=''; state.selectedPreviewStudent=''; renderStudentViewPage()">${levelOptions(state.selectedLevel)}</select>
+    <select onchange="state.selectedClass=this.value; state.selectedPreviewStudent=''; renderStudentViewPage()">${classOptions(state.selectedLevel, state.selectedClass)}</select>
+    <select onchange="state.selectedPreviewStudent=this.value; renderStudentViewPage()">${studentOptions(state.selectedLevel, state.selectedClass, state.selectedPreviewStudent)}</select>
+    <button onclick="loadStudentPreviewWork()">ดูมุมมองนักเรียน</button>
+    <button onclick="loadStudentPreviewWork()">รีเฟรช</button>
+  `;
+  syncToolbarHeight();
+  $('content').innerHTML = selectedStudent
+    ? `<div class="hero-empty">เลือก ${escapeHtml(selectedStudent.Name)} แล้วกดดูมุมมองนักเรียน</div>`
+    : '<div class="hero-empty">เลือกระดับชั้น ห้อง และนักเรียน เพื่อดูหน้าฝั่งนักเรียน</div>';
+}
+
+async function loadStudentPreviewWork() {
+  if (!state.selectedPreviewStudent) return showToast('กรุณาเลือกนักเรียน');
+  const previewUser = getStudent(state.selectedPreviewStudent);
+  try {
+    setLoading('กำลังโหลดมุมมองนักเรียน...');
+    const data = await apiGet({ action: 'studentWork', userId: state.selectedPreviewStudent });
+    const list = data.work || [];
+    $('content').innerHTML = `
+      <div class="student-preview-note">โหมดครูดูตัวอย่าง: ${escapeHtml(previewUser?.Name || '')} / ${escapeHtml(previewUser?.ClassName || '')} ไม่สามารถส่งงานแทนนักเรียนได้</div>
+      <div class="card-list">${list.map(w => renderStudentPreviewCard(w, previewUser)).join('') || '<div class="hero-empty">ไม่พบงานของนักเรียนคนนี้</div>'}</div>`;
+  } catch (err) { showToast(err.message); }
+}
+
+function renderStudentPreviewCard(w, previewUser) {
+  const a = w.assignment;
+  const s = w.submission;
+  const left = s?.fileUrls?.[0] ? drivePreview(s.fileUrls[0], 'งาน') : (a.WorksheetURL ? drivePreview(a.WorksheetURL, 'ใบงาน') : '<strong>ใบงาน</strong>');
+  return `<article class="layout-card">
+    <div class="slot-note">(มุมมองนักเรียน)</div>
+    <div class="card-icons">
+      <button class="icon-btn" title="แสดง/ซ่อนใบงาน" onclick="toggleWorksheet('${a.AssignmentID}')">👁</button>
+      <button class="icon-btn" title="คำสั่งใบงาน" onclick="showAssignmentInfo('${a.AssignmentID}')">📄</button>
+    </div>
+    <div class="work-preview" id="worksheetBox_${escapeHtml(a.AssignmentID)}">${left}</div>
+    <div class="detail-panel">
+      <h3>${escapeHtml(a.Topic)}</h3>
+      <div><b>นักเรียน:</b> ${escapeHtml(previewUser?.Name || '')} / ${escapeHtml(previewUser?.ClassName || '')}</div>
+      <div>คะแนนเต็ม ${escapeHtml(a.FullScore || '-')} | สถานะงาน <span class="status-pill">${escapeHtml(a.Status || '')}</span></div>
+      <div>ประเภท: ${escapeHtml(a.WorkType)} ${w.group ? `<br>กลุ่ม: ${escapeHtml(w.group.GroupName)}<br>สมาชิก: ${escapeHtml(w.group.MemberNames)}` : ''}</div>
+      <div>สถานะส่ง: <span class="status-pill">${s ? 'ส่งแล้ว' : 'ยังไม่ส่ง'}</span> ${s ? `<span class="status-pill">${escapeHtml(s.CheckedStatus || '')}</span> <span class="status-pill">คะแนน ${escapeHtml(s.Score || '-')}</span>` : ''}</div>
+      <label>คำตอบ/หมายเหตุ <textarea disabled>${escapeHtml(s?.WorkText || '')}</textarea></label>
+      <div class="detail-actions">
+        <button disabled>โหมดดูตัวอย่าง</button>
+        ${a.WorksheetURL ? `<button onclick="window.open('${escapeHtml(a.WorksheetURL)}','_blank')">เปิดใบงาน</button>` : ''}
+      </div>
+      ${s?.ReturnStatus === 'ส่งคืน' ? `<div><b>ครูส่งคืน:</b> ${escapeHtml(s.ReturnNote || '')}</div>` : ''}
+    </div>
+  </article>`;
+}
+
 function renderScoreTablePage() {
   $('pageToolbar').innerHTML = `
     <select onchange="state.selectedLevel=this.value; state.selectedClass=''; renderScoreTablePage()">${levelOptions(state.selectedLevel)}</select>
@@ -366,11 +448,93 @@ function scoreTableHtml(data) {
 }
 function exportScoreImage() { showToast('เตรียมไว้สำหรับ V2 รอบต่อไป: บันทึกตารางเป็นรูปภาพ'); }
 
-async function renderSettingsPage() {
-  $('pageToolbar').innerHTML = `<button onclick="refreshBootstrap()">รีเฟรชข้อมูล</button><button onclick="runSystemCheck()">ตรวจสอบข้อมูลชีต</button>`;
+function renderSettingsPage() {
+  const user = state.user || {};
+  $('pageToolbar').innerHTML = `
+    <button onclick="previewThemeFromForm()">แสดงตัวอย่างธีม</button>
+    <button onclick="saveThemeSettings()">บันทึกธีมบัญชี</button>
+    <button onclick="resetThemeForm()">กลับค่าเริ่มต้น</button>
+    <button onclick="runSystemCheck()">ตรวจสอบข้อมูลชีต</button>
+  `;
   syncToolbarHeight();
-  $('content').innerHTML = `<div class="settings-grid"><div class="system-card"><h3>ตั้งค่าระบบ</h3><p>ใช้ชีต Settings เป็นตัวกำหนดค่า เช่น DEFAULT_DRIVE_FOLDER_ID, AUTO_REFRESH_SECONDS, SESSION_DAYS</p></div><div class="system-card"><h3>ตรวจสอบข้อมูลชีต</h3><div id="checkResult">กดปุ่มตรวจสอบข้อมูลชีต</div></div></div>`;
+  $('content').innerHTML = `
+    <div class="settings-grid">
+      <div class="system-card">
+        <h3>เปลี่ยนสีธีม</h3>
+        <div class="theme-form">
+          <div class="theme-row">
+            <label>สีธีมหลัก
+              <input id="themeAccent" type="color" value="${escapeHtml(normalizeHexColor(user.AccentColor || '#22C55E'))}">
+            </label>
+            <label>สีพื้นหลัง
+              <input id="themeBg" type="color" value="${escapeHtml(normalizeHexColor(user.BackgroundColor || '#000000', '#000000'))}">
+            </label>
+          </div>
+          <label>ลิงก์รูปพื้นหลัง
+            <input id="themeBgImage" value="${escapeHtml(user.BackgroundImageURL || '')}" placeholder="https://...">
+          </label>
+          <div class="theme-swatch-list">
+            ${themeSwatch('#22C55E')}${themeSwatch('#38BDF8')}${themeSwatch('#A855F7')}${themeSwatch('#EC4899')}${themeSwatch('#F97316')}${themeSwatch('#FACC15')}${themeSwatch('#EF4444')}
+          </div>
+          <small>สีธีมจะใช้กับแถบเครื่องมือ กรอบการ์ดแบบมองทะลุ ปุ่ม และสีตารางคะแนนของบัญชีนี้</small>
+        </div>
+      </div>
+      <div class="system-card">
+        <h3>อื่นๆ</h3>
+        <p><b>ชื่อระบบ:</b> Matrix Student System V2</p>
+        <p><b>Auto refresh:</b> อ่านค่าจากชีต Settings / AUTO_REFRESH_SECONDS</p>
+        <p><b>ที่เก็บไฟล์:</b> อ่านค่าจากชีต Settings / DEFAULT_DRIVE_FOLDER_ID</p>
+        <p><b>Session:</b> ระบบจำการเข้าสู่ระบบตามค่าจาก Settings / SESSION_DAYS</p>
+      </div>
+      <div class="system-card">
+        <h3>ตรวจสอบข้อมูลชีต</h3>
+        <div id="checkResult">กดปุ่มตรวจสอบข้อมูลชีตด้านบน</div>
+      </div>
+      <div class="system-card">
+        <h3>มุมมองนักเรียน</h3>
+        <p>เปิดจากเมนูซ้าย เพื่อดูตัวอย่างหน้าที่นักเรียนเห็น โดยเลือกชั้น ห้อง และชื่อนักเรียน</p>
+      </div>
+    </div>`;
 }
+
+function themeSwatch(color) {
+  return `<button class="theme-swatch" style="background:${color}" title="${color}" onclick="setThemeAccent('${color}')"></button>`;
+}
+function setThemeAccent(color) {
+  const el = $('themeAccent');
+  if (el) el.value = normalizeHexColor(color);
+  previewThemeFromForm();
+}
+function getThemeFromForm() {
+  return {
+    AccentColor: normalizeHexColor($('themeAccent')?.value || state.user?.AccentColor || '#22C55E'),
+    BackgroundColor: normalizeHexColor($('themeBg')?.value || state.user?.BackgroundColor || '#000000', '#000000'),
+    BackgroundImageURL: $('themeBgImage')?.value?.trim() || '',
+    ThemeColor: normalizeHexColor($('themeAccent')?.value || state.user?.AccentColor || '#22C55E')
+  };
+}
+function previewThemeFromForm() {
+  const theme = getThemeFromForm();
+  applyTheme({ ...(state.user || {}), ...theme });
+  showToast('แสดงตัวอย่างธีมแล้ว');
+}
+function resetThemeForm() {
+  if ($('themeAccent')) $('themeAccent').value = '#22C55E';
+  if ($('themeBg')) $('themeBg').value = '#000000';
+  if ($('themeBgImage')) $('themeBgImage').value = '';
+  previewThemeFromForm();
+}
+async function saveThemeSettings() {
+  try {
+    const theme = getThemeFromForm();
+    const data = await apiPost({ action: 'updateUserTheme', userId: state.user.UserID, theme });
+    state.user = data.user || { ...state.user, ...theme };
+    applyTheme(state.user);
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ user: state.user, bootstrap: state.bootstrap, savedAt: Date.now() }));
+    showToast('บันทึกธีมของบัญชีแล้ว');
+  } catch (err) { showToast(err.message); }
+}
+
 async function runSystemCheck() {
   try {
     const data = await apiGet({ action: 'systemCheck' });
