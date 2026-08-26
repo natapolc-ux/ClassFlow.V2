@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Matrix Student System V2</title>
+  <style>
+    :root {
+      --accent: #22c55e;
+      --bg: #000000;
+      --text: #e8ffe8;
+      --muted: #9ac3a3;
+      --panel: rgba(0, 24, 7, .88);
+      --line: #00ff66;
+      --danger: #ef4444;
+      --warning: #facc15;
+      --sidebar-full: 300px;
+      --sidebar-collapsed: 92px;
+      --sidebar-width: var(--sidebar-full);
+      --header-h: 88px;
+      --toolbar-h: 112px;
+      --border: 2px solid var(--line);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+    body.with-bg-image { background-size: cover; background-position: center; background-attachment: fixed; }
+    button, input, select, textarea { font: inherit; }
+    button, .btn { background: #001b08; color: var(--line); border: var(--border); padding: 10px 14px; cursor: pointer; font-weight: 700; }
+    button:hover { filter: brightness(1.25); }
+    button.danger { background: #210000; color: #ffb4b4; border-color: #ef4444; }
+    button.warn { background: #201a00; color: #ffe680; border-color: #facc15; }
+    button.icon-btn { width: 48px; height: 48px; padding: 0; display: inline-grid; place-items: center; font-size: 22px; background: var(--warning); color: #111; border-color: var(--warning); }
+    input, select, textarea { background: #050505; color: var(--text); border: 1px solid var(--line); padding: 10px; min-height: 42px; }
+    textarea { width: 100%; min-height: 110px; resize: vertical; }
+    label { display: grid; gap: 6px; color: var(--muted); font-size: 14px; }
+    .hidden { display: none !important; }
+
+    .login-screen { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+    .login-card { width: min(420px, 100%); border: var(--border); padding: 28px; background: rgba(0,0,0,.86); box-shadow: 0 0 30px rgba(34,197,94,.25); }
+    .login-card h1 { margin: 0 0 20px; text-align: center; color: var(--line); }
+    .login-card .stack { display: grid; gap: 14px; }
+
+    .app-shell { --sidebar-width: var(--sidebar-full); min-height: 100vh; }
+    .app-shell.collapsed { --sidebar-width: var(--sidebar-collapsed); }
+    .sidebar { position: fixed; inset: 0 auto 0 0; width: var(--sidebar-width); background: rgba(0,20,7,.95); border-right: var(--border); overflow: hidden; z-index: 50; transition: width .2s ease; }
+    .sidebar-inner { padding-top: calc(var(--header-h) + 24px); display: grid; gap: 8px; }
+    .nav-btn { display: grid; grid-template-columns: 48px 1fr; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 8px 20px; border: 0; border-left: 5px solid transparent; background: transparent; color: var(--line); text-align: left; }
+    .nav-btn.active { background: rgba(34,197,94,.18); border-left-color: var(--line); }
+    .nav-icon { width: 32px; text-align: center; font-size: 22px; line-height: 1; }
+    .app-shell.collapsed .nav-btn { grid-template-columns: 48px; padding-left: 20px; }
+    .app-shell.collapsed .nav-label { display: none; }
+
+    .top-header { position: fixed; top: 0; left: var(--sidebar-width); right: 0; height: var(--header-h); border-bottom: var(--border); background: rgba(10,10,10,.96); display: grid; grid-template-columns: 110px 1fr 110px; align-items: center; padding: 0 20px; z-index: 60; transition: left .2s ease; }
+    .menu-toggle { width: 54px; height: 54px; padding: 0; justify-self: start; font-size: 24px; background: #004d14; color: var(--line); border-color: var(--line); }
+    .page-title { text-align: center; font-size: 22px; font-weight: 800; color: var(--text); }
+    .logout-btn { justify-self: end; width: 76px; min-height: 48px; padding: 8px 10px; background: #7f0000; color: #fff; border-color: #ff2020; }
+
+    .page-toolbar { position: fixed; top: var(--header-h); left: var(--sidebar-width); right: 0; min-height: var(--toolbar-h); border-bottom: var(--border); background: rgba(95,0,10,.96); display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; padding: 16px 24px; z-index: 55; transition: left .2s ease; }
+    .page-toolbar input, .page-toolbar select { min-width: 150px; }
+    .content { margin-left: var(--sidebar-width); padding-top: calc(var(--header-h) + var(--toolbar-h)); min-height: 100vh; transition: margin-left .2s ease; }
+    .content-inner { padding: 0; }
+
+    .hero-empty { padding: 34px; color: var(--muted); text-align: center; }
+    .card-list { display: grid; gap: 0; }
+    .layout-card { border-bottom: var(--border); background: rgba(150, 48, 210, .85); min-height: 430px; display: grid; grid-template-columns: minmax(430px, 1fr) minmax(380px, .88fr); gap: clamp(40px, 8vw, 150px); align-items: center; justify-items: center; padding: 70px 52px; position: relative; }
+    .layout-card .slot-note { position: absolute; top: 14px; left: 18px; color: #090909; font-weight: 700; }
+    .work-preview { width: min(520px, 100%); min-height: 360px; background: #52d3d4; color: #050505; display: grid; place-items: center; padding: 18px; overflow: hidden; }
+    .work-preview iframe, .work-preview img { width: 100%; height: 340px; border: 0; object-fit: contain; background: white; }
+    .work-preview .text-work { white-space: pre-wrap; width: 100%; align-self: stretch; overflow: auto; background: rgba(255,255,255,.65); padding: 14px; }
+    .detail-panel { width: min(520px, 100%); min-height: 340px; background: #cbd5df; color: #111; padding: 20px; display: grid; gap: 12px; align-content: start; }
+    .detail-panel h3 { margin: 0; }
+    .detail-panel input, .detail-panel textarea, .detail-panel select { background: #f8fafc; color: #111; border-color: #333; }
+    .card-icons { position: absolute; top: 18px; right: 24px; display: flex; gap: 22px; }
+    .detail-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .status-pill { display: inline-flex; align-items: center; border: 1px solid #111; padding: 3px 8px; font-size: 13px; background: #eef2ff; color: #111; }
+
+    .score-wrap { overflow: auto; max-height: calc(100vh - var(--header-h) - var(--toolbar-h)); background: #fff; color: #111; }
+    .score-table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 14px 16px; background: #fff; padding: 0; }
+    .score-table th { background: #91a5f5; padding: 20px; min-width: 220px; position: sticky; top: 0; z-index: 2; }
+    .score-table td { background: #dfe5ff; padding: 18px; min-width: 220px; height: 72px; }
+    .score-table th:first-child, .score-table td:first-child { position: sticky; left: 0; z-index: 3; min-width: 300px; background: #c8d2fb; }
+    .score-input { width: 80px; min-height: 36px; padding: 6px; }
+
+    .settings-grid { padding: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+    .system-card { border: var(--border); background: var(--panel); padding: 18px; }
+    .system-card h3 { margin-top: 0; color: var(--line); }
+    .issue { border-left: 4px solid var(--warning); padding: 8px 10px; margin: 6px 0; background: rgba(250,204,21,.1); }
+    .issue.error { border-left-color: var(--danger); background: rgba(239,68,68,.15); }
+
+    .toast { position: fixed; right: 18px; bottom: 18px; max-width: 460px; background: #001805; color: var(--line); border: var(--border); padding: 14px 18px; z-index: 200; display: none; }
+    .toast.show { display: block; }
+
+    @media (max-width: 980px) {
+      :root { --sidebar-full: 230px; --sidebar-collapsed: 76px; --header-h: 78px; --toolbar-h: 150px; }
+      .top-header { grid-template-columns: 80px 1fr 88px; padding: 0 12px; }
+      .layout-card { grid-template-columns: 1fr; gap: 24px; padding: 46px 20px; }
+      .work-preview, .detail-panel { width: min(640px, 100%); }
+    }
+  </style>
+</head>
+<body>
+  <section id="loginScreen" class="login-screen">
+    <div class="login-card">
+      <h1>Matrix Student System V2</h1>
+      <div class="stack">
+        <label>รหัสผู้ใช้ <input id="loginUser" autocomplete="username"></label>
+        <label>รหัสผ่าน <input id="loginPass" type="password" autocomplete="current-password"></label>
+        <button onclick="login()">เข้าสู่ระบบ</button>
+        <div id="loginMsg" class="muted"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="appShell" class="app-shell hidden">
+    <aside class="sidebar">
+      <div id="teacherNav" class="sidebar-inner hidden">
+        <button class="nav-btn active" data-page="assignments" onclick="switchPage('assignments')"><span class="nav-icon">📄</span><span class="nav-label">คำสั่งงาน</span></button>
+        <button class="nav-btn" data-page="reviewAll" onclick="switchPage('reviewAll')"><span class="nav-icon">📝</span><span class="nav-label">ตรวจงานรวม</span></button>
+        <button class="nav-btn" data-page="scoreTable" onclick="switchPage('scoreTable')"><span class="nav-icon">📊</span><span class="nav-label">ตารางคะแนน</span></button>
+        <button class="nav-btn" data-page="reviewOne" onclick="switchPage('reviewOne')"><span class="nav-icon">👥</span><span class="nav-label">ตรวจงานรายบุคคล</span></button>
+        <button class="nav-btn" data-page="settings" onclick="switchPage('settings')"><span class="nav-icon">⋯</span><span class="nav-label">อื่นๆ</span></button>
+      </div>
+      <div id="studentNav" class="sidebar-inner hidden">
+        <button class="nav-btn active" data-page="studentWork" onclick="switchPage('studentWork')"><span class="nav-icon">📚</span><span class="nav-label">งานของฉัน</span></button>
+        <button class="nav-btn" data-page="studentReturned" onclick="switchPage('studentReturned')"><span class="nav-icon">↩</span><span class="nav-label">งานที่ถูกส่งคืน</span></button>
+      </div>
+    </aside>
+
+    <header class="top-header">
+      <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
+      <div id="pageTitle" class="page-title">คำสั่งงาน</div>
+      <button class="logout-btn" onclick="logout()">logout</button>
+    </header>
+
+    <div id="pageToolbar" class="page-toolbar"></div>
+    <main class="content"><div id="content" class="content-inner"></div></main>
+  </section>
+
+  <div id="toast" class="toast"></div>
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
