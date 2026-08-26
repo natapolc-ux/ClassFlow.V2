@@ -3,15 +3,22 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Matrix Student System V2</title>
+  <title>Class Flow V.2</title>
   <style>
     :root {
       --accent: #22c55e;
+      --accent-rgb: 34, 197, 94;
       --bg: #000000;
       --text: #e8ffe8;
       --muted: #9ac3a3;
       --panel: rgba(0, 24, 7, .88);
       --line: #00ff66;
+      --toolbar-bg: rgba(var(--accent-rgb), .38);
+      --toolbar-border: rgba(var(--accent-rgb), .98);
+      --layout-panel-bg: rgba(var(--accent-rgb), .26);
+      --score-head-bg: rgba(var(--accent-rgb), .58);
+      --score-name-bg: rgba(var(--accent-rgb), .32);
+      --score-cell-bg: rgba(var(--accent-rgb), .14);
       --danger: #ef4444;
       --warning: #facc15;
       --sidebar-full: 300px;
@@ -56,14 +63,14 @@
     .page-title { text-align: center; font-size: 22px; font-weight: 800; color: var(--text); }
     .logout-btn { justify-self: end; width: 76px; min-height: 48px; padding: 8px 10px; background: #7f0000; color: #fff; border-color: #ff2020; }
 
-    .page-toolbar { position: fixed; top: var(--header-h); left: var(--sidebar-width); right: 0; min-height: var(--toolbar-h); border-bottom: var(--border); background: rgba(95,0,10,.96); display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; padding: 16px 24px; z-index: 55; transition: left .2s ease; }
+    .page-toolbar { position: fixed; top: var(--header-h); left: var(--sidebar-width); right: 0; min-height: var(--toolbar-h); border-bottom: var(--border); background: var(--toolbar-bg); border-color: var(--toolbar-border); display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; padding: 16px 24px; z-index: 55; transition: left .2s ease; }
     .page-toolbar input, .page-toolbar select { min-width: 150px; }
     .content { margin-left: var(--sidebar-width); padding-top: calc(var(--header-h) + var(--toolbar-h)); min-height: 100vh; transition: margin-left .2s ease; }
     .content-inner { padding: 0; }
 
     .hero-empty { padding: 34px; color: var(--muted); text-align: center; }
     .card-list { display: grid; gap: 0; }
-    .layout-card { border-bottom: var(--border); background: rgba(150, 48, 210, .85); min-height: 430px; display: grid; grid-template-columns: minmax(430px, 1fr) minmax(380px, .88fr); gap: clamp(40px, 8vw, 150px); align-items: center; justify-items: center; padding: 70px 52px; position: relative; }
+    .layout-card { border-bottom: var(--border); background: var(--layout-panel-bg); min-height: 430px; display: grid; grid-template-columns: minmax(430px, 1fr) minmax(380px, .88fr); gap: clamp(40px, 8vw, 150px); align-items: center; justify-items: center; padding: 70px 52px; position: relative; }
     .layout-card .slot-note { position: absolute; top: 14px; left: 18px; color: #090909; font-weight: 700; }
     .work-preview { width: min(520px, 100%); min-height: 360px; background: #52d3d4; color: #050505; display: grid; place-items: center; padding: 18px; overflow: hidden; }
     .work-preview iframe, .work-preview img { width: 100%; height: 340px; border: 0; object-fit: contain; background: white; }
@@ -75,16 +82,22 @@
     .detail-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .status-pill { display: inline-flex; align-items: center; border: 1px solid #111; padding: 3px 8px; font-size: 13px; background: #eef2ff; color: #111; }
 
-    .score-wrap { overflow: auto; max-height: calc(100vh - var(--header-h) - var(--toolbar-h)); background: #fff; color: #111; }
-    .score-table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 14px 16px; background: #fff; padding: 0; }
-    .score-table th { background: #91a5f5; padding: 20px; min-width: 220px; position: sticky; top: 0; z-index: 2; }
-    .score-table td { background: #dfe5ff; padding: 18px; min-width: 220px; height: 72px; }
-    .score-table th:first-child, .score-table td:first-child { position: sticky; left: 0; z-index: 3; min-width: 300px; background: #c8d2fb; }
+    .score-wrap { overflow: auto; max-height: calc(100vh - var(--header-h) - var(--toolbar-h)); background: rgba(255,255,255,.92); color: #111; }
+    .score-table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 14px 16px; background: transparent; padding: 0; }
+    .score-table th { background: var(--score-head-bg); padding: 20px; min-width: 220px; position: sticky; top: 0; z-index: 2; }
+    .score-table td { background: var(--score-cell-bg); padding: 18px; min-width: 220px; height: 72px; }
+    .score-table th:first-child, .score-table td:first-child { position: sticky; left: 0; z-index: 3; min-width: 300px; background: var(--score-name-bg); }
     .score-input { width: 80px; min-height: 36px; padding: 6px; }
 
     .settings-grid { padding: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
     .system-card { border: var(--border); background: var(--panel); padding: 18px; }
     .system-card h3 { margin-top: 0; color: var(--line); }
+
+    .theme-form { display: grid; gap: 14px; }
+    .theme-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; align-items: end; }
+    .theme-swatch-list { display: flex; gap: 10px; flex-wrap: wrap; }
+    .theme-swatch { width: 42px; height: 42px; border: 2px solid var(--line); cursor: pointer; box-shadow: 0 0 12px rgba(var(--accent-rgb), .25); }
+    .student-preview-note { border: 1px dashed var(--line); color: var(--muted); padding: 10px; background: rgba(0,0,0,.25); }
     .issue { border-left: 4px solid var(--warning); padding: 8px 10px; margin: 6px 0; background: rgba(250,204,21,.1); }
     .issue.error { border-left-color: var(--danger); background: rgba(239,68,68,.15); }
 
@@ -102,7 +115,7 @@
 <body>
   <section id="loginScreen" class="login-screen">
     <div class="login-card">
-      <h1>Matrix Student System V2</h1>
+      <h1>Class Flow V.2</h1>
       <div class="stack">
         <label>รหัสผู้ใช้ <input id="loginUser" autocomplete="username"></label>
         <label>รหัสผ่าน <input id="loginPass" type="password" autocomplete="current-password"></label>
@@ -119,6 +132,7 @@
         <button class="nav-btn" data-page="reviewAll" onclick="switchPage('reviewAll')"><span class="nav-icon">📝</span><span class="nav-label">ตรวจงานรวม</span></button>
         <button class="nav-btn" data-page="scoreTable" onclick="switchPage('scoreTable')"><span class="nav-icon">📊</span><span class="nav-label">ตารางคะแนน</span></button>
         <button class="nav-btn" data-page="reviewOne" onclick="switchPage('reviewOne')"><span class="nav-icon">👥</span><span class="nav-label">ตรวจงานรายบุคคล</span></button>
+        <button class="nav-btn" data-page="studentView" onclick="switchPage('studentView')"><span class="nav-icon">🎒</span><span class="nav-label">มุมมองนักเรียน</span></button>
         <button class="nav-btn" data-page="settings" onclick="switchPage('settings')"><span class="nav-icon">⋯</span><span class="nav-label">อื่นๆ</span></button>
       </div>
       <div id="studentNav" class="sidebar-inner hidden">
