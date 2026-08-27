@@ -480,11 +480,22 @@ function renderSettingsPage() {
         </div>
       </div>
       <div class="system-card">
-        <h3>อื่นๆ</h3>
-        <p><b>ชื่อระบบ:</b> Matrix Student System V2</p>
-        <p><b>Auto refresh:</b> อ่านค่าจากชีต Settings / AUTO_REFRESH_SECONDS</p>
-        <p><b>ที่เก็บไฟล์:</b> อ่านค่าจากชีต Settings / DEFAULT_DRIVE_FOLDER_ID</p>
-        <p><b>Session:</b> ระบบจำการเข้าสู่ระบบตามค่าจาก Settings / SESSION_DAYS</p>
+        <h3>ดึงงานเก่าจากระบบเดิม</h3>
+        <p>ใช้สำหรับนำข้อมูลงานที่นักเรียนเคยส่งในระบบเดิมมาเก็บรวมในชีต <b>Submissions</b> ของ V2</p>
+        <div class="theme-form">
+          <label>ลิงก์หรือ Spreadsheet ID ของชีตหลักระบบเก่า
+            <input id="legacySheetUrl" placeholder="วางลิงก์ Google Sheet ระบบเก่า หรือ Spreadsheet ID">
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;color:var(--text);">
+            <input id="legacyCreateMissing" type="checkbox"> สร้างงานใน Main ให้อัตโนมัติ ถ้าไม่พบงานชื่อเดียวกันใน V2
+          </label>
+          <small>ระบบจะจับคู่จาก <b>Level + Topic</b> เป็นหลัก และจะข้ามรายการที่เคยดึงเข้ามาแล้ว</small>
+          <div class="detail-actions">
+            <button onclick="previewLegacyImport()">ตรวจสอบก่อนดึง</button>
+            <button onclick="importLegacyWork()">ดึงงานเก่าเข้า V2</button>
+          </div>
+          <div id="legacyImportResult" class="student-preview-note">ยังไม่ได้ตรวจสอบไฟล์ระบบเก่า</div>
+        </div>
       </div>
       <div class="system-card">
         <h3>ตรวจสอบข้อมูลชีต</h3>
@@ -532,6 +543,56 @@ async function saveThemeSettings() {
     applyTheme(state.user);
     localStorage.setItem(SESSION_KEY, JSON.stringify({ user: state.user, bootstrap: state.bootstrap, savedAt: Date.now() }));
     showToast('บันทึกธีมของบัญชีแล้ว');
+  } catch (err) { showToast(err.message); }
+}
+
+
+function getLegacyImportForm() {
+  return {
+    legacySpreadsheetUrl: $('legacySheetUrl')?.value?.trim() || '',
+    createMissingAssignments: $('legacyCreateMissing')?.checked || false,
+    userId: state.user?.UserID || ''
+  };
+}
+function renderLegacyImportResult(data) {
+  const box = $('legacyImportResult');
+  if (!box) return;
+  const skipped = data.skippedAssignments || [];
+  const errors = data.errors || [];
+  box.innerHTML = `
+    <div><b>พบงานใน Main เดิม:</b> ${escapeHtml(data.legacyAssignments || 0)} งาน</div>
+    <div><b>จับคู่กับ V2 ได้:</b> ${escapeHtml(data.matchedAssignments || 0)} งาน</div>
+    <div><b>พบรายการงานส่ง:</b> ${escapeHtml(data.foundSubmissions || 0)} รายการ</div>
+    <div><b>นำเข้าแล้ว:</b> ${escapeHtml(data.imported || 0)} รายการ</div>
+    <div><b>ข้ามรายการซ้ำ:</b> ${escapeHtml(data.skippedDuplicates || 0)} รายการ</div>
+    ${skipped.length ? `<div class="issue"><b>งานที่ยังไม่ถูกนำเข้า:</b><br>${skipped.slice(0, 12).map(x => escapeHtml(`${x.level || '-'} / ${x.topic || '-'}: ${x.reason || ''}`)).join('<br>')}${skipped.length > 12 ? '<br>...' : ''}</div>` : ''}
+    ${errors.length ? `<div class="issue error"><b>ข้อผิดพลาด:</b><br>${errors.slice(0, 8).map(x => escapeHtml(x)).join('<br>')}${errors.length > 8 ? '<br>...' : ''}</div>` : ''}
+  `;
+}
+async function previewLegacyImport() {
+  try {
+    const form = getLegacyImportForm();
+    if (!form.legacySpreadsheetUrl) return showToast('กรุณาวางลิงก์หรือ Spreadsheet ID ของชีตระบบเก่า');
+    $('legacyImportResult').textContent = 'กำลังตรวจสอบข้อมูลระบบเก่า...';
+    const data = await apiGet({
+      action: 'legacyImportPreview',
+      legacySpreadsheetUrl: form.legacySpreadsheetUrl,
+      createMissingAssignments: form.createMissingAssignments ? 'true' : ''
+    });
+    renderLegacyImportResult(data);
+    showToast('ตรวจสอบข้อมูลเก่าแล้ว');
+  } catch (err) { showToast(err.message); }
+}
+async function importLegacyWork() {
+  try {
+    const form = getLegacyImportForm();
+    if (!form.legacySpreadsheetUrl) return showToast('กรุณาวางลิงก์หรือ Spreadsheet ID ของชีตระบบเก่า');
+    if (!confirm('ดึงงานเก่าเข้า Submissions ของ V2 ใช่ไหม\nระบบจะข้ามรายการที่เคยดึงแล้ว')) return;
+    $('legacyImportResult').textContent = 'กำลังดึงงานเก่าเข้า V2...';
+    const data = await apiPost({ action: 'importLegacySubmissions', ...form });
+    renderLegacyImportResult(data);
+    await refreshBootstrap(false);
+    showToast('ดึงงานเก่าเสร็จแล้ว');
   } catch (err) { showToast(err.message); }
 }
 
