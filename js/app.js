@@ -177,7 +177,7 @@ function classOptions(level, selected='') {
 }
 function assignmentOptions(level='', selected='') {
   const arr = state.assignments.filter(a => !level || a.Level === level);
-  return `<option value="">เลือกใบงาน</option>` + arr.map(a => `<option ${a.AssignmentID===selected?'selected':''} value="${escapeHtml(a.AssignmentID)}">${escapeHtml(a.Topic)} (${escapeHtml(a.AssignmentID)})</option>`).join('');
+  return `<option value="">เลือกใบงาน</option>` + arr.map(a => `<option ${a.AssignmentID===selected?'selected':''} value="${escapeHtml(a.AssignmentID)}">${escapeHtml(a.Topic)}</option>`).join('');
 }
 function getAssignment(id) { return state.assignments.find(a => a.AssignmentID === id); }
 function studentOptions(level='', className='', selected='') {
@@ -346,7 +346,7 @@ function renderAssignmentCard(a) {
     </div>
     <div class="detail-panel">
       <h3>${escapeHtml(a.Topic)}</h3>
-      <div><b>รหัสงาน:</b> ${escapeHtml(a.AssignmentID)} <span class="status-pill">${escapeHtml(a.Status || 'เปิดใช้งาน')}</span></div>
+      <div><b>สถานะงาน:</b> <span class="status-pill">${escapeHtml(a.Status || 'เปิดใช้งาน')}</span></div>
       <div><b>ระดับชั้น:</b> ${escapeHtml(a.Level)} | <b>คะแนนเต็ม:</b> ${escapeHtml(a.FullScore || '')}</div>
       <div><b>ประเภทงาน:</b> ${escapeHtml(a.WorkType)} | <b>กลุ่ม:</b> ${escapeHtml(a.GroupMode)}</div>
       <div><b>รูปแบบคำสั่ง:</b> ${escapeHtml(type)}</div>
@@ -568,8 +568,8 @@ function renderSubmissionCard(s) {
     </div>
     <div class="work-preview" id="subPreview_${escapeHtml(s.SubmissionID)}">${left}</div>
     <div class="detail-panel">
-      <h3>${escapeHtml(a.Topic || s.AssignmentID)}</h3>
-      <div>งานที่ ${escapeHtml(s.AssignmentID)} ห้อง ${escapeHtml(s.Class)} เลขที่ ${escapeHtml(s.No || '-')}</div>
+      <h3>${escapeHtml(a.Topic || 'งานที่ส่ง')}</h3>
+      <div>ห้อง ${escapeHtml(s.Class)} เลขที่ ${escapeHtml(s.No || '-')}</div>
       <div>ชื่อ ${escapeHtml(s.StudentName)} เลขประจำตัว ${escapeHtml(s.StudentID)}</div>
       ${s.GroupName ? `<div>กลุ่ม ${escapeHtml(s.GroupName)}<br>สมาชิก: ${escapeHtml(s.MemberNames)}</div>` : ''}
       <div>สถานะ <span class="status-pill">${escapeHtml(s.CheckedStatus || 'ยังไม่ตรวจ')}</span> <span class="status-pill">${escapeHtml(s.LateStatus || '')}</span></div>
@@ -700,14 +700,23 @@ function renderStudentPreviewCard(w, previewUser) {
 
 function renderScoreTablePage() {
   $('pageToolbar').innerHTML = `
-    <select onchange="state.selectedLevel=this.value; state.selectedClass=''; renderScoreTablePage()">${levelOptions(state.selectedLevel)}</select>
-    <select onchange="state.selectedClass=this.value; renderScoreTablePage()">${classOptions(state.selectedLevel, state.selectedClass)}</select>
+    <select onchange="state.selectedLevel=this.value; state.selectedClass=''; state.scoreTable=null; renderScoreTablePage()">${levelOptions(state.selectedLevel)}</select>
+    <select onchange="state.selectedClass=this.value; state.scoreTable=null; renderScoreTablePage()">${classOptions(state.selectedLevel, state.selectedClass)}</select>
     <button onclick="loadScoreTable()">โหลดตาราง</button>
     <button onclick="loadScoreTable()">รีเฟรช</button>
     <button onclick="exportScoreImage()">บันทึกตารางเป็นรูปภาพ</button>
+    <div class="score-tools">
+      <span id="scoreSelectedCount">เลือกแล้ว 0 ช่อง</span>
+      <button onclick="clearScoreCellSelection()">ยกเลิกการเลือก</button>
+      <button onclick="batchScoreMarkChecked()">ตรวจแล้ว</button>
+      <button onclick="batchScoreFullScore()">ให้คะแนนเต็ม</button>
+      <input id="scoreBulkValue" class="score-bulk-input" placeholder="คะแนน">
+      <button onclick="batchScoreCustomScore()">ให้คะแนน</button>
+    </div>
   `;
   syncToolbarHeight();
   $('content').innerHTML = state.scoreTable ? scoreTableHtml(state.scoreTable) : '<div class="hero-empty">เลือกระดับชั้น/ห้อง แล้วกดโหลดตาราง</div>';
+  updateScoreSelectedCount();
 }
 async function loadScoreTable() {
   if (!state.selectedLevel || !state.selectedClass) return showToast('กรุณาเลือกระดับชั้นและห้อง');
@@ -716,10 +725,110 @@ async function loadScoreTable() {
     const data = await apiGet({ action: 'scoreTable', level: state.selectedLevel, className: state.selectedClass });
     state.scoreTable = data;
     $('content').innerHTML = scoreTableHtml(data);
+    updateScoreSelectedCount();
   } catch (err) { showToast(err.message); }
 }
+function firstNameOnly(name) {
+  return String(name || '').trim().split(/\s+/)[0] || '';
+}
+function shortTopic(topic, max=24) {
+  const text = String(topic || '').trim();
+  if (text.length <= max) return text;
+  return text.slice(0, max).trimEnd() + '…';
+}
+function assignmentWorkNumber(a, index) {
+  const raw = String(a?.SortOrder || '').trim();
+  if (/^\d+(?:\.\d+)?$/.test(raw)) return raw;
+  return String(index + 1);
+}
+function scoreCellDisplay(c) {
+  const score = String(c?.score ?? '').trim();
+  if (score) return escapeHtml(score);
+  const status = String(c?.checkedStatus || '').trim();
+  if (status === 'ตรวจแล้ว') return 'ตรวจแล้ว';
+  if (status === 'ยังไม่ส่ง') return '<span class="score-empty">ยังไม่ส่ง</span>';
+  return '';
+}
 function scoreTableHtml(data) {
-  return `<div class="score-wrap"><table class="score-table"><thead><tr><th>รายชื่อ</th>${data.assignments.map(a=>`<th><input type="checkbox"> งานที่ ${escapeHtml(a.SortOrder || a.AssignmentID)}<br>${escapeHtml(a.Topic)}</th>`).join('')}</tr></thead><tbody>${data.rows.map(r=>`<tr><td>เลขที่ ${escapeHtml(r.user.No || '')}<br>${escapeHtml(r.user.UserID)} / ${escapeHtml(r.user.Name)}</td>${r.cells.map(c=>`<td><input type="checkbox"> <input class="score-input" value="${escapeHtml(c.score || '')}" disabled><br><small>${escapeHtml(c.checkedStatus || '')}</small></td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  const assignments = data.assignments || [];
+  const rows = data.rows || [];
+  const head = assignments.map((a, idx) => {
+    const workNo = assignmentWorkNumber(a, idx);
+    return `<th class="score-assignment-head">
+      <label class="score-check-label"><input type="checkbox" class="score-col-check" data-assignment-id="${escapeHtml(a.AssignmentID)}" onchange="toggleScoreColumn('${escapeHtml(a.AssignmentID)}', this.checked)"></label>
+      <div class="score-head-title">งานที่ ${escapeHtml(workNo)} ${escapeHtml(shortTopic(a.Topic || ''))}</div>
+    </th>`;
+  }).join('');
+  const body = rows.map(r => {
+    const u = r.user || {};
+    const name = firstNameOnly(u.Name);
+    const cells = (r.cells || []).map(c => {
+      const hasSubmission = !!c.submissionId;
+      return `<td class="score-cell ${hasSubmission ? '' : 'score-cell-disabled'}" data-assignment-id="${escapeHtml(c.assignmentId || '')}" data-submission-id="${escapeHtml(c.submissionId || '')}">
+        <label class="score-check-label"><input type="checkbox" class="score-cell-check" ${hasSubmission ? '' : 'disabled'} data-submission-id="${escapeHtml(c.submissionId || '')}" data-assignment-id="${escapeHtml(c.assignmentId || '')}" onchange="updateScoreSelectedCount()"></label>
+        <div class="score-value-box">${scoreCellDisplay(c)}</div>
+      </td>`;
+    }).join('');
+    return `<tr>
+      <td class="score-student-name">
+        <div>เลขที่ ${escapeHtml(u.No || '-')} ${escapeHtml(u.UserID || '')}</div>
+        <div>${escapeHtml(name || '-')}</div>
+      </td>
+      ${cells}
+    </tr>`;
+  }).join('');
+  return `<div class="score-wrap"><table class="score-table"><thead><tr><th class="score-name-head">รายชื่อ</th>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+}
+function getSelectedScoreCells() {
+  const map = new Map();
+  document.querySelectorAll('.score-cell-check:checked').forEach(cb => {
+    const submissionId = cb.dataset.submissionId || '';
+    if (!submissionId) return;
+    map.set(submissionId, { submissionId, assignmentId: cb.dataset.assignmentId || '' });
+  });
+  return Array.from(map.values());
+}
+function updateScoreSelectedCount() {
+  const el = $('scoreSelectedCount');
+  if (el) el.textContent = `เลือกแล้ว ${getSelectedScoreCells().length} ช่อง`;
+}
+function clearScoreCellSelection() {
+  document.querySelectorAll('.score-cell-check,.score-col-check').forEach(cb => cb.checked = false);
+  updateScoreSelectedCount();
+}
+function toggleScoreColumn(assignmentId, checked) {
+  document.querySelectorAll(`.score-cell-check[data-assignment-id="${CSS.escape(String(assignmentId))}"]`).forEach(cb => {
+    if (!cb.disabled) cb.checked = checked;
+  });
+  updateScoreSelectedCount();
+}
+function getScoreAssignment(assignmentId) {
+  return (state.scoreTable?.assignments || []).find(a => String(a.AssignmentID) === String(assignmentId)) || getAssignment(assignmentId) || {};
+}
+async function batchUpdateScoreCells(makePayload, successMessage) {
+  const selected = getSelectedScoreCells();
+  if (!selected.length) return showToast('กรุณาเลือกช่องคะแนนก่อน');
+  try {
+    for (const item of selected) {
+      await apiPost(makePayload(item));
+    }
+    showToast(successMessage || 'บันทึกคะแนนแล้ว');
+    await loadScoreTable();
+  } catch (err) { showToast(err.message); }
+}
+function batchScoreMarkChecked() {
+  batchUpdateScoreCells(item => ({ action: 'updateSubmission', submissionId: item.submissionId, userId: state.user.UserID, CheckedStatus: 'ตรวจแล้ว' }), 'เปลี่ยนสถานะเป็นตรวจแล้ว');
+}
+function batchScoreFullScore() {
+  batchUpdateScoreCells(item => {
+    const a = getScoreAssignment(item.assignmentId);
+    return { action: 'updateSubmission', submissionId: item.submissionId, userId: state.user.UserID, Score: a.FullScore || '', CheckedStatus: 'ตรวจแล้ว' };
+  }, 'ให้คะแนนเต็มกับช่องที่เลือกแล้ว');
+}
+function batchScoreCustomScore() {
+  const score = $('scoreBulkValue')?.value ?? '';
+  if (!String(score).trim()) return showToast('กรุณาใส่คะแนนก่อน');
+  batchUpdateScoreCells(item => ({ action: 'updateSubmission', submissionId: item.submissionId, userId: state.user.UserID, Score: score, CheckedStatus: 'ตรวจแล้ว' }), 'ให้คะแนนกับช่องที่เลือกแล้ว');
 }
 function exportScoreImage() { showToast('เตรียมไว้สำหรับ V2 รอบต่อไป: บันทึกตารางเป็นรูปภาพ'); }
 
