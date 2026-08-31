@@ -74,7 +74,12 @@
     .layout-card .slot-note { position: absolute; top: 14px; left: 18px; color: #090909; font-weight: 700; }
     .work-preview { width: min(520px, 100%); min-height: 360px; background: #52d3d4; color: #050505; display: grid; place-items: center; padding: 18px; overflow: hidden; }
     .work-preview iframe, .work-preview img { width: 100%; height: 340px; border: 0; object-fit: contain; background: white; }
+    .preview-frame-wrap { width: 100%; display: grid; gap: 8px; align-content: start; }
+    .preview-open-link { color: #062b2b; font-weight: 800; text-align: center; }
     .work-preview .text-work { white-space: pre-wrap; width: 100%; align-self: stretch; overflow: auto; background: rgba(255,255,255,.65); padding: 14px; }
+    .submitted-summary { border: 1px dashed #111; background: rgba(255,255,255,.45); padding: 10px; display: grid; gap: 6px; }
+    .submitted-links { display: flex; flex-wrap: wrap; gap: 8px; }
+    .submitted-links a { color: #065f46; font-weight: 800; }
     .instruction-work { display: grid; gap: 12px; align-content: start; }
     .instruction-badge { display: inline-flex; width: fit-content; padding: 4px 10px; border-radius: 999px; background: rgba(0,0,0,.72); color: #fff; font-weight: 800; font-size: 13px; }
     .detail-panel { width: min(520px, 100%); min-height: 340px; background: #cbd5df; color: #111; padding: 20px; display: grid; gap: 12px; align-content: start; }
@@ -83,6 +88,11 @@
     .card-icons { position: absolute; top: 18px; right: 24px; display: flex; gap: 22px; }
     .detail-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .status-pill { display: inline-flex; align-items: center; border: 1px solid #111; padding: 3px 8px; font-size: 13px; background: #eef2ff; color: #111; }
+    .bulk-review-toolbar { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; width: 100%; padding-top: 6px; border-top: 1px solid rgba(255,255,255,.28); }
+    .bulk-review-toolbar span { color: #fff; font-weight: 800; padding: 8px 10px; background: rgba(0,0,0,.28); border: 1px solid rgba(255,255,255,.2); }
+    .submission-select { position: absolute; top: 16px; left: 18px; z-index: 8; display: inline-flex; grid-template-columns: none; align-items: center; gap: 8px; color: #111; font-weight: 900; background: rgba(255,255,255,.86); border: 2px solid #111; padding: 8px 12px; }
+    .submission-select input { min-height: auto; width: 18px; height: 18px; accent-color: var(--accent); }
+    .layout-card.select-mode { outline: 3px dashed rgba(var(--accent-rgb), .85); outline-offset: -10px; }
 
     .score-wrap { overflow: auto; max-height: calc(100vh - var(--header-h) - var(--toolbar-h)); background: rgba(255,255,255,.92); color: #111; }
     .score-table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 14px 16px; background: transparent; padding: 0; }
