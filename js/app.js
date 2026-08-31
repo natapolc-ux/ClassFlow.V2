@@ -223,8 +223,9 @@ function renderAssignmentPreview(a, label='ใบงาน') {
 }
 
 function renderWorkOrAssignmentPreview(workOrSubmission, assignment) {
-  const fileUrl = firstSubmissionFileUrl(workOrSubmission);
-  if (fileUrl) return drivePreview(fileUrl, 'งาน');
+  const fileUrls = getSubmissionFileUrls(workOrSubmission);
+  const text = getSubmissionTextWithoutOnlyLinks(workOrSubmission);
+  if (fileUrls.length) return renderSubmittedFilePreview(fileUrls, text);
   if (String(workOrSubmission?.WorkText || '').trim()) return `<div class="text-work">${escapeHtml(workOrSubmission.WorkText).replace(/\n/g, '<br>')}</div>`;
   return renderAssignmentPreview(assignment, 'ใบงาน');
 }
@@ -234,19 +235,80 @@ function renderStudentAssignmentPreview(w) {
   return renderAssignmentPreview(a, 'ใบงาน');
 }
 
+function splitFileList(value) {
+  if (Array.isArray(value)) return value.map(x => String(x || '').trim()).filter(Boolean);
+  return String(value || '').split(/[\n,;]+/).map(x => x.trim()).filter(Boolean);
+}
+
+function extractUrlsFromText(text) {
+  const found = String(text || '').match(/https?:\/\/[^\s<>'"]+/g) || [];
+  return found.map(url => url.replace(/[),.;]+$/g, '')).filter(Boolean);
+}
+
+function uniqueList(list) {
+  const seen = new Set();
+  const out = [];
+  (list || []).forEach(item => {
+    const value = String(item || '').trim();
+    if (!value || seen.has(value)) return;
+    seen.add(value);
+    out.push(value);
+  });
+  return out;
+}
+
+function fileIdToDriveUrl(id) {
+  const cleanId = String(id || '').trim();
+  if (!cleanId) return '';
+  if (/^https?:\/\//i.test(cleanId)) return cleanId;
+  return `https://drive.google.com/file/d/${cleanId}/view`;
+}
+
+function getSubmissionFileUrls(submission) {
+  if (!submission) return [];
+  const urls = [];
+  urls.push(...splitFileList(submission.fileUrls));
+  urls.push(...splitFileList(submission.FileURLs));
+  urls.push(...splitFileList(submission.FileURL));
+  urls.push(...splitFileList(submission.FileUrl));
+  urls.push(...splitFileList(submission.WorkURL));
+  urls.push(...splitFileList(submission.WorkLink));
+  splitFileList(submission.FileIDs).forEach(id => urls.push(fileIdToDriveUrl(id)));
+  splitFileList(submission.FileID).forEach(id => urls.push(fileIdToDriveUrl(id)));
+  urls.push(...extractUrlsFromText(submission.WorkText));
+  return uniqueList(urls);
+}
+
+function getSubmissionTextWithoutOnlyLinks(submission) {
+  const text = String(submission?.WorkText || '').trim();
+  if (!text) return '';
+  const urls = extractUrlsFromText(text);
+  const stripped = urls.reduce((acc, url) => acc.replace(url, ''), text).trim();
+  return stripped || '';
+}
+
 function firstSubmissionFileUrl(submission) {
-  const fileUrls = submission?.fileUrls || csv(submission?.FileURLs);
-  if (fileUrls && fileUrls.length) return fileUrls[0];
-  const fileIds = csv(submission?.FileIDs);
-  if (fileIds.length) return `https://drive.google.com/file/d/${fileIds[0]}/view`;
-  return '';
+  return getSubmissionFileUrls(submission)[0] || '';
+}
+
+function renderSubmittedFilePreview(fileUrls, text='') {
+  const urls = uniqueList(fileUrls);
+  if (!urls.length) return '';
+  const first = urls[0];
+  const preview = drivePreview(first, 'งานที่ส่ง');
+  const links = urls.map((url, i) => `<a href="${escapeHtml(url)}" target="_blank">เปิดไฟล์ ${i + 1}</a>`).join(' ');
+  return `<div class="submitted-file-preview">
+    ${preview}
+    ${urls.length > 1 ? `<div class="submitted-links">${links}</div>` : ''}
+    ${text ? `<div class="text-work submitted-text">${escapeHtml(text).replace(/\n/g, '<br>')}</div>` : ''}
+  </div>`;
 }
 
 function renderSubmittedWorkSummary(submission) {
   if (!submission) return '';
-  const fileUrls = submission.fileUrls || csv(submission.FileURLs);
+  const fileUrls = getSubmissionFileUrls(submission);
   const fileLinks = fileUrls.map((url, i) => `<a href="${escapeHtml(url)}" target="_blank">เปิดไฟล์ที่ส่ง ${i + 1}</a>`).join(' ');
-  const text = String(submission.WorkText || '').trim();
+  const text = getSubmissionTextWithoutOnlyLinks(submission);
   if (!fileLinks && !text) return '';
   return `<div class="submitted-summary">
     <b>งานที่ส่งแล้ว</b>
