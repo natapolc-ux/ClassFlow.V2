@@ -175,6 +175,10 @@ function classOptions(level, selected='') {
   const classes = state.classesByLevel[level] || [];
   return `<option value="">เลือกห้อง</option>` + classes.map(c => `<option ${c===selected?'selected':''} value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
 }
+function reviewAllClassOptions(level, selected='') {
+  const classes = state.classesByLevel[level] || [];
+  return `<option value="" ${selected===''?'selected':''}>ทุกห้อง</option>` + classes.map(c => `<option ${c===selected?'selected':''} value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+}
 function assignmentOptions(level='', selected='') {
   const arr = state.assignments.filter(a => !level || a.Level === level);
   return `<option value="">เลือกใบงาน</option>` + arr.map(a => `<option ${a.AssignmentID===selected?'selected':''} value="${escapeHtml(a.AssignmentID)}">${escapeHtml(a.Topic)}</option>`).join('');
@@ -432,7 +436,7 @@ function renderReviewAllPage() {
   $('pageToolbar').innerHTML = `
     <select onchange="state.selectedLevel=this.value; state.selectedAssignment=''; state.selectedClass=''; clearSelectedSubmissions(false); renderReviewAllPage()">${levelOptions(state.selectedLevel)}</select>
     <select onchange="state.selectedAssignment=this.value; clearSelectedSubmissions(false); renderReviewAllPage()">${assignmentOptions(state.selectedLevel, state.selectedAssignment)}</select>
-    <select onchange="state.selectedClass=this.value; clearSelectedSubmissions(false); renderReviewAllPage()">${classOptions(state.selectedLevel, state.selectedClass)}</select>
+    <select onchange="state.selectedClass=this.value; clearSelectedSubmissions(false); renderReviewAllPage()">${reviewAllClassOptions(state.selectedLevel, state.selectedClass)}</select>
     <button onclick="loadSubmissions()">โหลดงาน</button>
     <button onclick="loadSubmissions()">รีเฟรช</button>
     <button class="${state.reviewSelectMode ? 'warn' : ''}" onclick="toggleReviewSelectMode()">${state.reviewSelectMode ? 'ปิดโหมดเลือกหลายงาน' : 'เลือกหลายงาน'}</button>
@@ -756,7 +760,7 @@ function scoreTableHtml(data) {
     const workNo = assignmentWorkNumber(a, idx);
     return `<th class="score-assignment-head">
       <label class="score-check-label"><input type="checkbox" class="score-col-check" data-assignment-id="${escapeHtml(a.AssignmentID)}" onchange="toggleScoreColumn('${escapeHtml(a.AssignmentID)}', this.checked)"></label>
-      <div class="score-head-title">งานที่ ${escapeHtml(workNo)} ${escapeHtml(shortTopic(a.Topic || ''))}</div>
+      <div class="score-head-title">${escapeHtml(shortTopic(a.Topic || workNo))}</div>
     </th>`;
   }).join('');
   const body = rows.map(r => {
