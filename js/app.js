@@ -12,6 +12,8 @@ const state = {
   selectedAssignment: '',
   selectedPreviewStudent: '',
   submissions: [],
+  reviewSelectMode: false,
+  selectedSubmissionIds: new Set(),
   scoreTable: null
 };
 
@@ -221,10 +223,36 @@ function renderAssignmentPreview(a, label='ใบงาน') {
 }
 
 function renderWorkOrAssignmentPreview(workOrSubmission, assignment) {
-  const fileUrl = (workOrSubmission?.fileUrls || [])[0];
+  const fileUrl = firstSubmissionFileUrl(workOrSubmission);
   if (fileUrl) return drivePreview(fileUrl, 'งาน');
   if (String(workOrSubmission?.WorkText || '').trim()) return `<div class="text-work">${escapeHtml(workOrSubmission.WorkText).replace(/\n/g, '<br>')}</div>`;
   return renderAssignmentPreview(assignment, 'ใบงาน');
+}
+
+function renderStudentAssignmentPreview(w) {
+  const a = w?.assignment || {};
+  return renderAssignmentPreview(a, 'ใบงาน');
+}
+
+function firstSubmissionFileUrl(submission) {
+  const fileUrls = submission?.fileUrls || csv(submission?.FileURLs);
+  if (fileUrls && fileUrls.length) return fileUrls[0];
+  const fileIds = csv(submission?.FileIDs);
+  if (fileIds.length) return `https://drive.google.com/file/d/${fileIds[0]}/view`;
+  return '';
+}
+
+function renderSubmittedWorkSummary(submission) {
+  if (!submission) return '';
+  const fileUrls = submission.fileUrls || csv(submission.FileURLs);
+  const fileLinks = fileUrls.map((url, i) => `<a href="${escapeHtml(url)}" target="_blank">เปิดไฟล์ที่ส่ง ${i + 1}</a>`).join(' ');
+  const text = String(submission.WorkText || '').trim();
+  if (!fileLinks && !text) return '';
+  return `<div class="submitted-summary">
+    <b>งานที่ส่งแล้ว</b>
+    ${text ? `<div>${escapeHtml(text).replace(/\n/g, '<br>')}</div>` : ''}
+    ${fileLinks ? `<div class="submitted-links">${fileLinks}</div>` : ''}
+  </div>`;
 }
 
 function materialToggleLabel(a) {
@@ -272,12 +300,33 @@ function renderAssignmentCard(a) {
 }
 
 function drivePreview(url, label='ไฟล์') {
-  const id = extractDriveId(url);
-  if (!id) return `<a href="${escapeHtml(url)}" target="_blank">เปิด${label}</a>`;
-  return `<iframe loading="lazy" src="https://drive.google.com/file/d/${id}/preview"></iframe>`;
+  const previewUrl = getGooglePreviewUrl(url);
+  const safeUrl = escapeHtml(url);
+  if (!previewUrl) return `<a href="${safeUrl}" target="_blank">เปิด${label}</a>`;
+  return `<div class="preview-frame-wrap">
+    <iframe loading="lazy" src="${escapeHtml(previewUrl)}"></iframe>
+    <a class="preview-open-link" href="${safeUrl}" target="_blank">เปิด${label}ในแท็บใหม่</a>
+  </div>`;
 }
+
+function getGooglePreviewUrl(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+  if (/docs\.google\.com\/document\/d\//.test(raw)) return raw.split(/[?#]/)[0].replace(/\/edit.*$/, '/preview');
+  if (/docs\.google\.com\/spreadsheets\/d\//.test(raw)) return raw.split(/[?#]/)[0].replace(/\/edit.*$/, '/preview');
+  if (/docs\.google\.com\/presentation\/d\//.test(raw)) return raw.split(/[?#]/)[0].replace(/\/edit.*$/, '/preview');
+  const id = extractDriveId(raw);
+  if (id) return `https://drive.google.com/file/d/${id}/preview`;
+  return '';
+}
+
 function extractDriveId(url) {
-  const m = String(url || '').match(/\/d\/([a-zA-Z0-9_-]+)/) || String(url || '').match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  const text = String(url || '');
+  const m = text.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)
+    || text.match(/\/document\/d\/([a-zA-Z0-9_-]+)/)
+    || text.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/)
+    || text.match(/\/presentation\/d\/([a-zA-Z0-9_-]+)/)
+    || text.match(/[?&]id=([a-zA-Z0-9_-]+)/);
   return m ? m[1] : '';
 }
 function toggleWorksheet(id) {
@@ -319,16 +368,113 @@ function openCreateAssignment() {
 
 function renderReviewAllPage() {
   $('pageToolbar').innerHTML = `
-    <select onchange="state.selectedLevel=this.value; state.selectedAssignment=''; state.selectedClass=''; renderReviewAllPage()">${levelOptions(state.selectedLevel)}</select>
-    <select onchange="state.selectedAssignment=this.value; renderReviewAllPage()">${assignmentOptions(state.selectedLevel, state.selectedAssignment)}</select>
-    <select onchange="state.selectedClass=this.value; renderReviewAllPage()">${classOptions(state.selectedLevel, state.selectedClass)}</select>
+    <select onchange="state.selectedLevel=this.value; state.selectedAssignment=''; state.selectedClass=''; clearSelectedSubmissions(false); renderReviewAllPage()">${levelOptions(state.selectedLevel)}</select>
+    <select onchange="state.selectedAssignment=this.value; clearSelectedSubmissions(false); renderReviewAllPage()">${assignmentOptions(state.selectedLevel, state.selectedAssignment)}</select>
+    <select onchange="state.selectedClass=this.value; clearSelectedSubmissions(false); renderReviewAllPage()">${classOptions(state.selectedLevel, state.selectedClass)}</select>
     <button onclick="loadSubmissions()">โหลดงาน</button>
     <button onclick="loadSubmissions()">รีเฟรช</button>
+    <button class="${state.reviewSelectMode ? 'warn' : ''}" onclick="toggleReviewSelectMode()">${state.reviewSelectMode ? 'ปิดโหมดเลือกหลายงาน' : 'เลือกหลายงาน'}</button>
     <label style="display:flex;align-items:center;gap:8px;color:white;"><input id="hideChecked" type="checkbox" checked> ซ่อนงานที่ตรวจแล้ว</label>
+    ${state.reviewSelectMode ? renderBulkReviewToolbar() : ''}
   `;
   syncToolbarHeight();
   if (!state.submissions.length) $('content').innerHTML = '<div class="hero-empty">เลือกเงื่อนไขแล้วกดโหลดงาน</div>';
   else renderSubmissionCards(state.submissions);
+}
+
+function renderBulkReviewToolbar() {
+  return `<div class="bulk-review-toolbar">
+    <span id="bulkSelectedCount">เลือกแล้ว ${state.selectedSubmissionIds.size} งาน</span>
+    <button onclick="selectAllVisibleSubmissions()">เลือกทั้งหมดที่แสดง</button>
+    <button onclick="clearSelectedSubmissions()">ยกเลิกการเลือก</button>
+    <button onclick="batchMarkCheckedSelected()">ตรวจแล้ว</button>
+    <button onclick="batchFullScoreSelected()">ให้คะแนนเต็ม</button>
+    <button onclick="batchReturnSelected()">ส่งคืนงาน</button>
+    <button class="danger" onclick="batchDeleteSelected()">ลบงานที่เลือก</button>
+  </div>`;
+}
+
+function toggleReviewSelectMode() {
+  state.reviewSelectMode = !state.reviewSelectMode;
+  if (!state.reviewSelectMode) state.selectedSubmissionIds.clear();
+  renderReviewAllPage();
+}
+
+function updateBulkSelectedCount() {
+  const el = $('bulkSelectedCount');
+  if (el) el.textContent = `เลือกแล้ว ${state.selectedSubmissionIds.size} งาน`;
+  document.querySelectorAll('.submission-select-checkbox').forEach(cb => {
+    cb.checked = state.selectedSubmissionIds.has(cb.value);
+  });
+}
+
+function toggleSubmissionSelection(id, checked) {
+  if (checked) state.selectedSubmissionIds.add(id);
+  else state.selectedSubmissionIds.delete(id);
+  updateBulkSelectedCount();
+}
+
+function selectAllVisibleSubmissions() {
+  (state.submissions || []).forEach(s => {
+    if (s.SubmissionID) state.selectedSubmissionIds.add(String(s.SubmissionID));
+  });
+  updateBulkSelectedCount();
+}
+
+function clearSelectedSubmissions(render=true) {
+  state.selectedSubmissionIds.clear();
+  if (render && state.currentPage === 'reviewAll') renderReviewAllPage();
+}
+
+function selectedSubmissionIds() {
+  return Array.from(state.selectedSubmissionIds).filter(Boolean);
+}
+
+function selectedSubmissionObjects() {
+  const ids = new Set(selectedSubmissionIds());
+  return (state.submissions || []).filter(s => ids.has(String(s.SubmissionID)));
+}
+
+async function batchPostSelected(makePayload, successMessage) {
+  const ids = selectedSubmissionIds();
+  if (!ids.length) return showToast('กรุณาเลือกงานนักเรียนก่อน');
+  try {
+    for (const id of ids) {
+      await apiPost(makePayload(id));
+    }
+    showToast(successMessage || 'ดำเนินการกับงานที่เลือกแล้ว');
+    state.selectedSubmissionIds.clear();
+    await loadSubmissions();
+  } catch (err) { showToast(err.message); }
+}
+
+function batchMarkCheckedSelected() {
+  batchPostSelected(id => ({ action: 'updateSubmission', submissionId: id, userId: state.user.UserID, CheckedStatus: 'ตรวจแล้ว' }), 'เปลี่ยนสถานะงานที่เลือกเป็นตรวจแล้ว');
+}
+
+function batchFullScoreSelected() {
+  const items = selectedSubmissionObjects();
+  if (!items.length) return showToast('กรุณาเลือกงานนักเรียนก่อน');
+  batchPostSelected(id => {
+    const s = items.find(x => String(x.SubmissionID) === String(id));
+    const a = s?.assignment || getAssignment(s?.AssignmentID) || {};
+    return { action: 'updateSubmission', submissionId: id, userId: state.user.UserID, Score: a.FullScore || '', CheckedStatus: 'ตรวจแล้ว' };
+  }, 'ให้คะแนนเต็มกับงานที่เลือกแล้ว');
+}
+
+function batchReturnSelected() {
+  const ids = selectedSubmissionIds();
+  if (!ids.length) return showToast('กรุณาเลือกงานนักเรียนก่อน');
+  const note = prompt(`หมายเหตุส่งคืนงานที่เลือก ${ids.length} งาน`);
+  if (note === null) return;
+  batchPostSelected(id => ({ action: 'updateSubmission', submissionId: id, userId: state.user.UserID, ReturnStatus: 'ส่งคืน', ReturnNote: note, CheckedStatus: 'ยังไม่ตรวจ' }), 'ส่งคืนงานที่เลือกแล้ว');
+}
+
+function batchDeleteSelected() {
+  const ids = selectedSubmissionIds();
+  if (!ids.length) return showToast('กรุณาเลือกงานนักเรียนก่อน');
+  if (!confirm(`ลบงานที่เลือก ${ids.length} งานใช่ไหม`)) return;
+  batchPostSelected(id => ({ action: 'deleteSubmission', submissionId: id, userId: state.user.UserID }), 'ลบงานที่เลือกแล้ว');
 }
 
 async function loadSubmissions(extra={}) {
@@ -338,6 +484,7 @@ async function loadSubmissions(extra={}) {
     const hideChecked = $('hideChecked') ? $('hideChecked').checked : false;
     const data = await apiGet({ action: 'submissions', assignmentId: state.selectedAssignment, level: state.selectedLevel, className: state.selectedClass, hideChecked, ...extra });
     state.submissions = data.submissions || [];
+    state.selectedSubmissionIds.clear();
     renderSubmissionCards(state.submissions);
   } catch (err) { showToast(err.message); }
 }
@@ -349,8 +496,9 @@ function renderSubmissionCards(items) {
 function renderSubmissionCard(s) {
   const a = s.assignment || getAssignment(s.AssignmentID) || {};
   const left = renderWorkOrAssignmentPreview(s, a);
-  return `<article class="layout-card" data-submission="${escapeHtml(s.SubmissionID)}">
-    <div class="slot-note">(ช่องต่อ 1 งาน)</div>
+  const selected = state.selectedSubmissionIds.has(String(s.SubmissionID));
+  return `<article class="layout-card ${state.reviewSelectMode ? 'select-mode' : ''}" data-submission="${escapeHtml(s.SubmissionID)}">
+    ${state.reviewSelectMode ? `<label class="submission-select"><input class="submission-select-checkbox" type="checkbox" value="${escapeHtml(s.SubmissionID)}" ${selected ? 'checked' : ''} onchange="toggleSubmissionSelection('${escapeHtml(s.SubmissionID)}', this.checked)"> เลือกงานนี้</label>` : ''}
     <div class="card-icons">
       <button class="icon-btn" title="แสดง/ซ่อนงาน" onclick="toggleSubmissionPreview('${s.SubmissionID}')">👁</button>
       <button class="icon-btn" title="แสดงคำสั่งงาน" onclick="showAssignmentInfo('${s.AssignmentID}')">📄</button>
@@ -378,6 +526,12 @@ function renderSubmissionCard(s) {
 
 function toggleSubmissionPreview(id) {
   const box = $(`subPreview_${id}`);
+  if (!box) return;
+  if (box.style.visibility === 'hidden') box.style.visibility = 'visible';
+  else box.style.visibility = 'hidden';
+}
+function togglePreviewBox(id) {
+  const box = $(id);
   if (!box) return;
   if (box.style.visibility === 'hidden') box.style.visibility = 'visible';
   else box.style.visibility = 'hidden';
@@ -456,23 +610,25 @@ async function loadStudentPreviewWork() {
 function renderStudentPreviewCard(w, previewUser) {
   const a = w.assignment;
   const s = w.submission;
-  const left = renderWorkOrAssignmentPreview(s, a);
+  const left = s ? renderWorkOrAssignmentPreview(s, a) : renderStudentAssignmentPreview(w);
+  const previewId = `studentPreview_${a.AssignmentID}`;
   return `<article class="layout-card">
-    <div class="slot-note">(มุมมองนักเรียน)</div>
+    <div class="slot-note">${s ? '(งานที่นักเรียนส่ง)' : '(มุมมองนักเรียน)'}</div>
     <div class="card-icons">
-      <button class="icon-btn" title="แสดง/ซ่อนใบงานหรือคำสั่ง" onclick="toggleWorksheet('${a.AssignmentID}')">👁</button>
-      <button class="icon-btn" title="คำสั่งงาน" onclick="showAssignmentInfo('${a.AssignmentID}')">📄</button>
+      <button class="icon-btn" title="แสดง/ซ่อน${s ? 'งานนักเรียน' : 'ใบงานหรือคำสั่ง'}" onclick="togglePreviewBox('${previewId}')">👁</button>
     </div>
-    <div class="work-preview" id="worksheetBox_${escapeHtml(a.AssignmentID)}">${left}</div>
+    <div class="work-preview" id="${previewId}">${left}</div>
     <div class="detail-panel">
       <h3>${escapeHtml(a.Topic)}</h3>
       <div><b>นักเรียน:</b> ${escapeHtml(previewUser?.Name || '')} / ${escapeHtml(previewUser?.ClassName || '')}</div>
       <div>คะแนนเต็ม ${escapeHtml(a.FullScore || '-')} | สถานะงาน <span class="status-pill">${escapeHtml(a.Status || '')}</span></div>
       <div>ประเภท: ${escapeHtml(a.WorkType)} | รูปแบบคำสั่ง: ${escapeHtml(assignmentInstructionType(a))} ${w.group ? `<br>กลุ่ม: ${escapeHtml(w.group.GroupName)}<br>สมาชิก: ${escapeHtml(w.group.MemberNames)}` : ''}</div>
       <div>สถานะส่ง: <span class="status-pill">${s ? 'ส่งแล้ว' : 'ยังไม่ส่ง'}</span> ${s ? `<span class="status-pill">${escapeHtml(s.CheckedStatus || '')}</span> <span class="status-pill">คะแนน ${escapeHtml(s.Score || '-')}</span>` : ''}</div>
+      ${s ? '<div class="submitted-summary"><b>งานที่ส่งแล้วจะแสดงอยู่ฝั่งซ้าย</b></div>' : ''}
       <label>คำตอบ/หมายเหตุ <textarea disabled>${escapeHtml(s?.WorkText || '')}</textarea></label>
       <div class="detail-actions">
         <button disabled>โหมดดูตัวอย่าง</button>
+        <button onclick="showAssignmentInfo('${a.AssignmentID}')">ดูคำสั่งงาน</button>
         ${materialOpenButton(a)}
       </div>
       ${s?.ReturnStatus === 'ส่งคืน' ? `<div><b>ครูส่งคืน:</b> ${escapeHtml(s.ReturnNote || '')}</div>` : ''}
@@ -678,23 +834,25 @@ function renderStudentWorkCard(w) {
   const a = w.assignment;
   const s = w.submission;
   const canSubmit = a.Status === 'เปิดใช้งาน';
-  const left = renderWorkOrAssignmentPreview(s, a);
+  const left = s ? renderWorkOrAssignmentPreview(s, a) : renderStudentAssignmentPreview(w);
+  const previewId = `studentWorkPreview_${a.AssignmentID}`;
   return `<article class="layout-card">
-    <div class="slot-note">(ช่องต่อ 1 งาน)</div>
+    <div class="slot-note">${s ? '(งานที่ส่งแล้ว)' : '(ใบงาน)'}</div>
     <div class="card-icons">
-      <button class="icon-btn" title="แสดง/ซ่อนใบงานหรือคำสั่ง" onclick="toggleWorksheet('${a.AssignmentID}')">👁</button>
-      <button class="icon-btn" title="คำสั่งงาน" onclick="showAssignmentInfo('${a.AssignmentID}')">📄</button>
+      <button class="icon-btn" title="แสดง/ซ่อน${s ? 'งานที่ส่งแล้ว' : 'ใบงานหรือคำสั่ง'}" onclick="togglePreviewBox('${previewId}')">👁</button>
     </div>
-    <div class="work-preview" id="worksheetBox_${escapeHtml(a.AssignmentID)}">${left}</div>
+    <div class="work-preview" id="${previewId}">${left}</div>
     <div class="detail-panel">
       <h3>${escapeHtml(a.Topic)}</h3>
       <div>คะแนนเต็ม ${escapeHtml(a.FullScore || '-')} | สถานะงาน <span class="status-pill">${escapeHtml(a.Status || '')}</span></div>
       <div>ประเภท: ${escapeHtml(a.WorkType)} | รูปแบบคำสั่ง: ${escapeHtml(assignmentInstructionType(a))} ${w.group ? `<br>กลุ่ม: ${escapeHtml(w.group.GroupName)}<br>สมาชิก: ${escapeHtml(w.group.MemberNames)}` : ''}</div>
       <div>สถานะส่ง: <span class="status-pill">${s ? 'ส่งแล้ว' : 'ยังไม่ส่ง'}</span> ${s ? `<span class="status-pill">${escapeHtml(s.CheckedStatus || '')}</span> <span class="status-pill">คะแนน ${escapeHtml(s.Score || '-')}</span>` : ''}</div>
+      ${s ? '<div class="submitted-summary"><b>งานที่ส่งแล้วจะแสดงอยู่ฝั่งซ้าย</b></div>' : ''}
       <label>คำตอบ/ข้อความส่งงาน <textarea id="workText_${a.AssignmentID}" ${canSubmit?'':'disabled'}>${escapeHtml(s?.WorkText || '')}</textarea></label>
       <label>แนบไฟล์ <input id="file_${a.AssignmentID}" type="file" multiple ${canSubmit?'':'disabled'}></label>
       <div class="detail-actions">
         ${canSubmit ? `<button onclick="submitStudentWork('${a.AssignmentID}')">${s ? 'ส่งแก้ไข/ส่งใหม่' : 'ส่งงาน'}</button>` : '<button disabled>งานปิดการใช้งาน</button>'}
+        <button onclick="showAssignmentInfo('${a.AssignmentID}')">ดูคำสั่งงาน</button>
         ${materialOpenButton(a)}
       </div>
       ${s?.ReturnStatus === 'ส่งคืน' ? `<div><b>ครูส่งคืน:</b> ${escapeHtml(s.ReturnNote || '')}</div>` : ''}
