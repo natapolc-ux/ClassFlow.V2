@@ -186,6 +186,55 @@ function studentOptions(level='', className='', selected='') {
 }
 function getStudent(id) { return state.students.find(u => u.UserID === id); }
 
+function assignmentInstructionType(a) {
+  const raw = String(a?.InstructionType || '').trim();
+  if (['ข้อความ', 'ไฟล์ใบงาน', 'ข้อความและไฟล์'].includes(raw)) return raw;
+  const hasText = !!String(a?.Description || '').trim();
+  const hasUrl = !!String(a?.WorksheetURL || '').trim();
+  if (hasText && hasUrl) return 'ข้อความและไฟล์';
+  if (hasUrl) return 'ไฟล์ใบงาน';
+  return 'ข้อความ';
+}
+
+function worksheetIsVisible(a) {
+  const value = a?.WorksheetVisible;
+  return value === true || String(value || '').toUpperCase() === 'TRUE' || String(value || '').trim() === 'จริง' || String(value || '').trim() === 'แสดง';
+}
+
+function hasWorksheetFile(a) {
+  return !!String(a?.WorksheetURL || '').trim() && assignmentInstructionType(a) !== 'ข้อความ';
+}
+
+function renderInstructionText(a, emptyText='ยังไม่มีคำสั่งงาน') {
+  const description = String(a?.Description || '').trim();
+  return `<div class="text-work instruction-work">
+    <div class="instruction-badge">คำสั่งงานแบบข้อความ</div>
+    <strong>${escapeHtml(a?.Topic || 'คำสั่งงาน')}</strong>
+    <div>${escapeHtml(description || emptyText).replace(/\n/g, '<br>')}</div>
+  </div>`;
+}
+
+function renderAssignmentPreview(a, label='ใบงาน') {
+  if (hasWorksheetFile(a) && worksheetIsVisible(a)) return drivePreview(a.WorksheetURL, label);
+  if (!hasWorksheetFile(a)) return renderInstructionText(a);
+  return `<strong>${escapeHtml(label)}ถูกซ่อนไว้</strong>`;
+}
+
+function renderWorkOrAssignmentPreview(workOrSubmission, assignment) {
+  const fileUrl = (workOrSubmission?.fileUrls || [])[0];
+  if (fileUrl) return drivePreview(fileUrl, 'งาน');
+  if (String(workOrSubmission?.WorkText || '').trim()) return `<div class="text-work">${escapeHtml(workOrSubmission.WorkText).replace(/\n/g, '<br>')}</div>`;
+  return renderAssignmentPreview(assignment, 'ใบงาน');
+}
+
+function materialToggleLabel(a) {
+  return hasWorksheetFile(a) ? 'แสดง/ซ่อนใบงาน' : 'แสดง/ซ่อนคำสั่ง';
+}
+
+function materialOpenButton(a) {
+  return hasWorksheetFile(a) ? `<button onclick="window.open('${escapeHtml(a.WorksheetURL)}','_blank')">เปิดใบงาน</button>` : '';
+}
+
 function renderAssignmentsPage() {
   $('pageToolbar').innerHTML = `
     <select id="levelFilter" onchange="state.selectedLevel=this.value; state.selectedAssignment=''; renderAssignmentsPage()">${levelOptions(state.selectedLevel)}</select>
@@ -200,21 +249,22 @@ function renderAssignmentsPage() {
 
 function renderAssignmentCard(a) {
   const inactive = a.Status === 'ปิดใช้งาน';
-  const preview = a.WorksheetVisible === true || a.WorksheetVisible === 'TRUE' || a.WorksheetVisible === 'TRUE' || a.WorksheetVisible === 'จริง';
+  const type = assignmentInstructionType(a);
   return `<article class="layout-card" data-assignment="${escapeHtml(a.AssignmentID)}">
     <div class="work-preview" id="worksheetBox_${escapeHtml(a.AssignmentID)}">
-      ${preview && a.WorksheetURL ? drivePreview(a.WorksheetURL, 'ใบงาน') : '<strong>ใบงาน</strong>'}
+      ${renderAssignmentPreview(a, 'ใบงาน')}
     </div>
     <div class="detail-panel">
       <h3>${escapeHtml(a.Topic)}</h3>
       <div><b>รหัสงาน:</b> ${escapeHtml(a.AssignmentID)} <span class="status-pill">${escapeHtml(a.Status || 'เปิดใช้งาน')}</span></div>
       <div><b>ระดับชั้น:</b> ${escapeHtml(a.Level)} | <b>คะแนนเต็ม:</b> ${escapeHtml(a.FullScore || '')}</div>
       <div><b>ประเภทงาน:</b> ${escapeHtml(a.WorkType)} | <b>กลุ่ม:</b> ${escapeHtml(a.GroupMode)}</div>
+      <div><b>รูปแบบคำสั่ง:</b> ${escapeHtml(type)}</div>
       <div><b>ห้องที่สั่งงาน:</b> ${escapeHtml(a.AssignedClasses)}</div>
-      <div><b>คำอธิบาย:</b><br>${escapeHtml(a.Description || 'ไม่มีคำอธิบาย')}</div>
+      <div><b>คำอธิบาย:</b><br>${escapeHtml(a.Description || 'ไม่มีคำอธิบาย').replace(/\n/g, '<br>')}</div>
       <div class="detail-actions">
-        <button onclick="toggleWorksheet('${a.AssignmentID}')">แสดง/ซ่อนใบงาน</button>
-        ${a.WorksheetURL ? `<button onclick="window.open('${escapeHtml(a.WorksheetURL)}','_blank')">เปิดใบงาน</button>` : ''}
+        <button onclick="toggleWorksheet('${a.AssignmentID}')">${materialToggleLabel(a)}</button>
+        ${materialOpenButton(a)}
         <button class="${inactive?'':'warn'}" onclick="toggleAssignmentStatus('${a.AssignmentID}', '${inactive?'เปิดใช้งาน':'ปิดใช้งาน'}')">${inactive?'เปิดใช้งาน':'ปิดการใช้งาน'}</button>
       </div>
     </div>
@@ -235,17 +285,25 @@ function toggleWorksheet(id) {
   const a = getAssignment(id);
   if (!box || !a) return;
   if (box.dataset.hidden === '1') {
-    box.innerHTML = a.WorksheetURL ? drivePreview(a.WorksheetURL, 'ใบงาน') : '<strong>ไม่มีใบงาน</strong>';
+    box.innerHTML = renderAssignmentPreview(a, 'ใบงาน');
     box.dataset.hidden = '0';
   } else {
-    box.innerHTML = '<strong>ใบงานถูกซ่อนไว้</strong>';
+    box.innerHTML = `<strong>${hasWorksheetFile(a) ? 'ใบงานถูกซ่อนไว้' : 'คำสั่งงานถูกซ่อนไว้'}</strong>`;
     box.dataset.hidden = '1';
   }
 }
 function showAssignmentInfo(id) {
   const a = getAssignment(id);
   if (!a) return;
-  alert(`คำสั่งใบงาน\n\n${a.Topic}\n\n${a.Description || 'ไม่มีคำอธิบาย'}\n\nคะแนนเต็ม: ${a.FullScore || '-'}\nห้อง: ${a.AssignedClasses || '-'}`);
+  alert(`คำสั่งงาน
+
+${a.Topic}
+
+${a.Description || 'ไม่มีคำอธิบาย'}
+
+รูปแบบคำสั่ง: ${assignmentInstructionType(a)}
+คะแนนเต็ม: ${a.FullScore || '-'}
+ห้อง: ${a.AssignedClasses || '-'}`);
 }
 async function toggleAssignmentStatus(id, status) {
   if (!confirm(`${status} งานนี้ใช่ไหม`)) return;
@@ -256,7 +314,7 @@ async function toggleAssignmentStatus(id, status) {
   } catch (err) { showToast(err.message); }
 }
 function openCreateAssignment() {
-  alert('V2 Core นี้วางช่องเพิ่มงานไว้แล้ว ขั้นต่อไปสามารถทำ popup เพิ่มงานแบบเต็มได้');
+  alert('V2 รองรับคำสั่งงานแบบข้อความแล้ว: ให้เพิ่มคอลัมน์ InstructionType ใน Main และใส่ค่า ข้อความ / ไฟล์ใบงาน / ข้อความและไฟล์');
 }
 
 function renderReviewAllPage() {
@@ -290,13 +348,12 @@ function renderSubmissionCards(items) {
 
 function renderSubmissionCard(s) {
   const a = s.assignment || getAssignment(s.AssignmentID) || {};
-  const fileUrl = (s.fileUrls || [])[0];
-  const left = fileUrl ? drivePreview(fileUrl, 'งาน') : `<div class="text-work">${escapeHtml(s.WorkText || 'ไม่มีข้อความ/ไฟล์แนบ')}</div>`;
+  const left = renderWorkOrAssignmentPreview(s, a);
   return `<article class="layout-card" data-submission="${escapeHtml(s.SubmissionID)}">
     <div class="slot-note">(ช่องต่อ 1 งาน)</div>
     <div class="card-icons">
       <button class="icon-btn" title="แสดง/ซ่อนงาน" onclick="toggleSubmissionPreview('${s.SubmissionID}')">👁</button>
-      <button class="icon-btn" title="แสดงคำสั่งใบงาน" onclick="showAssignmentInfo('${s.AssignmentID}')">📄</button>
+      <button class="icon-btn" title="แสดงคำสั่งงาน" onclick="showAssignmentInfo('${s.AssignmentID}')">📄</button>
       <button class="icon-btn" title="ลบงานที่ส่ง" onclick="deleteSubmission('${s.SubmissionID}')">🗑</button>
     </div>
     <div class="work-preview" id="subPreview_${escapeHtml(s.SubmissionID)}">${left}</div>
@@ -313,7 +370,7 @@ function renderSubmissionCard(s) {
         <button onclick="markChecked('${s.SubmissionID}')">ตรวจแล้ว</button>
         <button onclick="returnWork('${s.SubmissionID}')">คืนงาน</button>
         <button onclick="fillFullScore('${s.SubmissionID}', '${escapeHtml(a.FullScore || '')}')">ให้คะแนนเต็ม</button>
-        ${a.WorksheetURL ? `<button onclick="window.open('${escapeHtml(a.WorksheetURL)}','_blank')">เปิดใบงาน</button>` : ''}
+        ${materialOpenButton(a)}
       </div>
     </div>
   </article>`;
@@ -399,24 +456,24 @@ async function loadStudentPreviewWork() {
 function renderStudentPreviewCard(w, previewUser) {
   const a = w.assignment;
   const s = w.submission;
-  const left = s?.fileUrls?.[0] ? drivePreview(s.fileUrls[0], 'งาน') : (a.WorksheetURL ? drivePreview(a.WorksheetURL, 'ใบงาน') : '<strong>ใบงาน</strong>');
+  const left = renderWorkOrAssignmentPreview(s, a);
   return `<article class="layout-card">
     <div class="slot-note">(มุมมองนักเรียน)</div>
     <div class="card-icons">
-      <button class="icon-btn" title="แสดง/ซ่อนใบงาน" onclick="toggleWorksheet('${a.AssignmentID}')">👁</button>
-      <button class="icon-btn" title="คำสั่งใบงาน" onclick="showAssignmentInfo('${a.AssignmentID}')">📄</button>
+      <button class="icon-btn" title="แสดง/ซ่อนใบงานหรือคำสั่ง" onclick="toggleWorksheet('${a.AssignmentID}')">👁</button>
+      <button class="icon-btn" title="คำสั่งงาน" onclick="showAssignmentInfo('${a.AssignmentID}')">📄</button>
     </div>
     <div class="work-preview" id="worksheetBox_${escapeHtml(a.AssignmentID)}">${left}</div>
     <div class="detail-panel">
       <h3>${escapeHtml(a.Topic)}</h3>
       <div><b>นักเรียน:</b> ${escapeHtml(previewUser?.Name || '')} / ${escapeHtml(previewUser?.ClassName || '')}</div>
       <div>คะแนนเต็ม ${escapeHtml(a.FullScore || '-')} | สถานะงาน <span class="status-pill">${escapeHtml(a.Status || '')}</span></div>
-      <div>ประเภท: ${escapeHtml(a.WorkType)} ${w.group ? `<br>กลุ่ม: ${escapeHtml(w.group.GroupName)}<br>สมาชิก: ${escapeHtml(w.group.MemberNames)}` : ''}</div>
+      <div>ประเภท: ${escapeHtml(a.WorkType)} | รูปแบบคำสั่ง: ${escapeHtml(assignmentInstructionType(a))} ${w.group ? `<br>กลุ่ม: ${escapeHtml(w.group.GroupName)}<br>สมาชิก: ${escapeHtml(w.group.MemberNames)}` : ''}</div>
       <div>สถานะส่ง: <span class="status-pill">${s ? 'ส่งแล้ว' : 'ยังไม่ส่ง'}</span> ${s ? `<span class="status-pill">${escapeHtml(s.CheckedStatus || '')}</span> <span class="status-pill">คะแนน ${escapeHtml(s.Score || '-')}</span>` : ''}</div>
       <label>คำตอบ/หมายเหตุ <textarea disabled>${escapeHtml(s?.WorkText || '')}</textarea></label>
       <div class="detail-actions">
         <button disabled>โหมดดูตัวอย่าง</button>
-        ${a.WorksheetURL ? `<button onclick="window.open('${escapeHtml(a.WorksheetURL)}','_blank')">เปิดใบงาน</button>` : ''}
+        ${materialOpenButton(a)}
       </div>
       ${s?.ReturnStatus === 'ส่งคืน' ? `<div><b>ครูส่งคืน:</b> ${escapeHtml(s.ReturnNote || '')}</div>` : ''}
     </div>
@@ -621,24 +678,24 @@ function renderStudentWorkCard(w) {
   const a = w.assignment;
   const s = w.submission;
   const canSubmit = a.Status === 'เปิดใช้งาน';
-  const left = s?.fileUrls?.[0] ? drivePreview(s.fileUrls[0], 'งาน') : (a.WorksheetURL ? drivePreview(a.WorksheetURL, 'ใบงาน') : '<strong>ใบงาน</strong>');
+  const left = renderWorkOrAssignmentPreview(s, a);
   return `<article class="layout-card">
     <div class="slot-note">(ช่องต่อ 1 งาน)</div>
     <div class="card-icons">
-      <button class="icon-btn" title="แสดง/ซ่อนใบงาน" onclick="toggleWorksheet('${a.AssignmentID}')">👁</button>
-      <button class="icon-btn" title="คำสั่งใบงาน" onclick="showAssignmentInfo('${a.AssignmentID}')">📄</button>
+      <button class="icon-btn" title="แสดง/ซ่อนใบงานหรือคำสั่ง" onclick="toggleWorksheet('${a.AssignmentID}')">👁</button>
+      <button class="icon-btn" title="คำสั่งงาน" onclick="showAssignmentInfo('${a.AssignmentID}')">📄</button>
     </div>
     <div class="work-preview" id="worksheetBox_${escapeHtml(a.AssignmentID)}">${left}</div>
     <div class="detail-panel">
       <h3>${escapeHtml(a.Topic)}</h3>
       <div>คะแนนเต็ม ${escapeHtml(a.FullScore || '-')} | สถานะงาน <span class="status-pill">${escapeHtml(a.Status || '')}</span></div>
-      <div>ประเภท: ${escapeHtml(a.WorkType)} ${w.group ? `<br>กลุ่ม: ${escapeHtml(w.group.GroupName)}<br>สมาชิก: ${escapeHtml(w.group.MemberNames)}` : ''}</div>
+      <div>ประเภท: ${escapeHtml(a.WorkType)} | รูปแบบคำสั่ง: ${escapeHtml(assignmentInstructionType(a))} ${w.group ? `<br>กลุ่ม: ${escapeHtml(w.group.GroupName)}<br>สมาชิก: ${escapeHtml(w.group.MemberNames)}` : ''}</div>
       <div>สถานะส่ง: <span class="status-pill">${s ? 'ส่งแล้ว' : 'ยังไม่ส่ง'}</span> ${s ? `<span class="status-pill">${escapeHtml(s.CheckedStatus || '')}</span> <span class="status-pill">คะแนน ${escapeHtml(s.Score || '-')}</span>` : ''}</div>
-      <label>คำตอบ/หมายเหตุ <textarea id="workText_${a.AssignmentID}" ${canSubmit?'':'disabled'}>${escapeHtml(s?.WorkText || '')}</textarea></label>
+      <label>คำตอบ/ข้อความส่งงาน <textarea id="workText_${a.AssignmentID}" ${canSubmit?'':'disabled'}>${escapeHtml(s?.WorkText || '')}</textarea></label>
       <label>แนบไฟล์ <input id="file_${a.AssignmentID}" type="file" multiple ${canSubmit?'':'disabled'}></label>
       <div class="detail-actions">
         ${canSubmit ? `<button onclick="submitStudentWork('${a.AssignmentID}')">${s ? 'ส่งแก้ไข/ส่งใหม่' : 'ส่งงาน'}</button>` : '<button disabled>งานปิดการใช้งาน</button>'}
-        ${a.WorksheetURL ? `<button onclick="window.open('${escapeHtml(a.WorksheetURL)}','_blank')">เปิดใบงาน</button>` : ''}
+        ${materialOpenButton(a)}
       </div>
       ${s?.ReturnStatus === 'ส่งคืน' ? `<div><b>ครูส่งคืน:</b> ${escapeHtml(s.ReturnNote || '')}</div>` : ''}
     </div>
@@ -649,6 +706,7 @@ async function submitStudentWork(assignmentId) {
     const input = $(`file_${assignmentId}`);
     const files = await Promise.all(Array.from(input.files || []).map(fileToPayload));
     const workText = $(`workText_${assignmentId}`).value;
+    if (!String(workText || '').trim() && !files.length) return showToast('กรุณาพิมพ์คำตอบหรือแนบไฟล์ก่อนส่งงาน');
     const assignment = getAssignment(assignmentId);
     const submitMode = assignment.WorkType === 'งานกลุ่ม' ? 'กลุ่ม' : 'เดี่ยว';
     await apiPost({ action: 'submitWork', userId: state.user.UserID, assignmentId, submitMode, workText, files });
