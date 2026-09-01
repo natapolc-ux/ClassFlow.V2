@@ -68,7 +68,7 @@
     .content { margin-left: var(--sidebar-width); padding-top: calc(var(--header-h) + var(--toolbar-h)); min-height: 100vh; transition: margin-left .2s ease; }
     .content-inner { padding: 0; }
 
-    .hero-empty { padding: 34px; color: var(--muted); text-align: center; }
+    .hero-empty { padding: 34px; color: #1f2937; font-weight: 800; text-align: center; }
     .card-list { display: grid; gap: 0; }
     .layout-card { border-bottom: var(--border); background: var(--layout-panel-bg); min-height: 430px; display: grid; grid-template-columns: minmax(430px, 1fr) minmax(380px, .88fr); gap: clamp(40px, 8vw, 150px); align-items: center; justify-items: center; padding: 70px 52px; position: relative; }
     .layout-card .slot-note { position: absolute; top: 14px; left: 18px; color: #090909; font-weight: 700; }
@@ -98,6 +98,7 @@
     .score-table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 14px 16px; background: transparent; padding: 0; }
     .score-table th { background: var(--accent); color: #fff; padding: 18px; min-width: 220px; position: sticky; top: 0; z-index: 2; box-shadow: 0 2px 0 rgba(0,0,0,.45); vertical-align: middle; text-align: center; }
     .score-table td { background: var(--score-cell-bg); padding: 10px 16px; min-width: 220px; height: 92px; border: 1px solid rgba(var(--accent-rgb), .35); vertical-align: middle; text-align: center; }
+    .score-table td.score-cell { position: relative; }
     .score-table th:first-child, .score-table td:first-child { position: sticky; left: 0; z-index: 3; min-width: 280px; background: var(--accent); color: #fff; box-shadow: 2px 0 0 rgba(0,0,0,.45); }
     .score-table th:first-child { z-index: 5; }
     .score-input { width: 80px; min-height: 36px; padding: 6px; }
@@ -106,10 +107,11 @@
     .score-bulk-input { width: 110px; min-width: 110px !important; text-align: center; }
     .score-check-label { display: inline-flex; align-items: center; justify-content: center; color: inherit; font-size: 12px; }
     .score-check-label input { min-height: auto; width: 18px; height: 18px; accent-color: var(--accent); }
-    .score-cell-inner { min-height: 72px; display: grid; grid-template-rows: 26px 1fr; place-items: center; align-content: center; gap: 4px; }
+    .score-cell-inner { min-height: 72px; position: relative; }
+    .score-cell .score-check-label { position: absolute; left: 2px; top: 50%; transform: translateY(-50%); z-index: 2; }
     .score-head-title { margin-top: 6px; font-weight: 900; line-height: 1.35; }
     .score-student-name { font-weight: 900; line-height: 1.45; white-space: nowrap; }
-    .score-value-box { min-height: 34px; display: grid; place-items: center; font-weight: 900; font-size: 18px; }
+    .score-value-box { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); min-height: 34px; display: grid; place-items: center; font-weight: 900; font-size: 18px; white-space: nowrap; }
     .score-empty { color: #555; font-weight: 700; font-size: 13px; }
     .score-cell-disabled { opacity: .6; }
     .score-tools button:disabled { opacity: .55; cursor: wait; }
