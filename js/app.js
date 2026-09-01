@@ -769,8 +769,10 @@ function scoreTableHtml(data) {
     const cells = (r.cells || []).map(c => {
       const hasSubmission = !!c.submissionId;
       return `<td class="score-cell ${hasSubmission ? '' : 'score-cell-disabled'}" data-assignment-id="${escapeHtml(c.assignmentId || '')}" data-submission-id="${escapeHtml(c.submissionId || '')}">
-        <label class="score-check-label"><input type="checkbox" class="score-cell-check" ${hasSubmission ? '' : 'disabled'} data-submission-id="${escapeHtml(c.submissionId || '')}" data-assignment-id="${escapeHtml(c.assignmentId || '')}" onchange="updateScoreSelectedCount()"></label>
-        <div class="score-value-box">${scoreCellDisplay(c)}</div>
+        <div class="score-cell-inner">
+          <label class="score-check-label"><input type="checkbox" class="score-cell-check" ${hasSubmission ? '' : 'disabled'} data-submission-id="${escapeHtml(c.submissionId || '')}" data-assignment-id="${escapeHtml(c.assignmentId || '')}" onchange="updateScoreSelectedCount()"></label>
+          <div class="score-value-box">${scoreCellDisplay(c)}</div>
+        </div>
       </td>`;
     }).join('');
     return `<tr>
@@ -812,13 +814,18 @@ function getScoreAssignment(assignmentId) {
 async function batchUpdateScoreCells(makePayload, successMessage) {
   const selected = getSelectedScoreCells();
   if (!selected.length) return showToast('กรุณาเลือกช่องคะแนนก่อน');
+  const buttons = Array.from(document.querySelectorAll('.score-tools button'));
   try {
-    for (const item of selected) {
-      await apiPost(makePayload(item));
-    }
-    showToast(successMessage || 'บันทึกคะแนนแล้ว');
+    buttons.forEach(button => button.disabled = true);
+    showToast(`กำลังบันทึก ${selected.length} ช่อง...`);
+    const updates = selected.map(item => makePayload(item));
+    await apiPost({ action: 'batchUpdateSubmissions', userId: state.user.UserID, updates });
+    showToast(`${successMessage || 'บันทึกคะแนนแล้ว'} (${selected.length} ช่อง)`);
     await loadScoreTable();
-  } catch (err) { showToast(err.message); }
+  } catch (err) {
+    showToast('บันทึกไม่สำเร็จ: ' + err.message);
+    buttons.forEach(button => button.disabled = false);
+  }
 }
 function batchScoreMarkChecked() {
   batchUpdateScoreCells(item => ({ action: 'updateSubmission', submissionId: item.submissionId, userId: state.user.UserID, CheckedStatus: 'ตรวจแล้ว' }), 'เปลี่ยนสถานะเป็นตรวจแล้ว');
