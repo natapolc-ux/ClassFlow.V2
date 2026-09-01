@@ -441,6 +441,7 @@ function renderReviewAllPage() {
     <button onclick="loadSubmissions()">รีเฟรช</button>
     <button class="${state.reviewSelectMode ? 'warn' : ''}" onclick="toggleReviewSelectMode()">${state.reviewSelectMode ? 'ปิดโหมดเลือกหลายงาน' : 'เลือกหลายงาน'}</button>
     <label style="display:flex;align-items:center;gap:8px;color:white;"><input id="hideChecked" type="checkbox" checked> ซ่อนงานที่ตรวจแล้ว</label>
+    <label style="display:flex;align-items:center;gap:8px;color:white;"><input id="hideGraded" type="checkbox"> ซ่อนงานที่ให้คะแนนแล้ว</label>
     ${state.reviewSelectMode ? renderBulkReviewToolbar() : ''}
   `;
   syncToolbarHeight();
@@ -548,7 +549,8 @@ async function loadSubmissions(extra={}) {
   try {
     setLoading('กำลังโหลดงาน...');
     const hideChecked = $('hideChecked') ? $('hideChecked').checked : false;
-    const data = await apiGet({ action: 'submissions', assignmentId: state.selectedAssignment, level: state.selectedLevel, className: state.selectedClass, hideChecked, ...extra });
+    const hideGraded = $('hideGraded') ? $('hideGraded').checked : false;
+    const data = await apiGet({ action: 'submissions', assignmentId: state.selectedAssignment, level: state.selectedLevel, className: state.selectedClass, hideChecked, hideGraded, ...extra });
     state.submissions = data.submissions || [];
     state.selectedSubmissionIds.clear();
     renderSubmissionCards(state.submissions);
