@@ -16,6 +16,7 @@ const state = {
   selectedSubmissionIds: new Set(),
   scoreTable: null
 };
+const ALL_OPTION = '__ALL__';
 
 const PAGE_TITLES = {
   assignments: 'คำสั่งงาน',
@@ -176,8 +177,19 @@ function classOptions(level, selected='') {
   return `<option value="">เลือกห้อง</option>` + classes.map(c => `<option ${c===selected?'selected':''} value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
 }
 function reviewAllClassOptions(level, selected='') {
-  const classes = state.classesByLevel[level] || [];
+  const classes = level === ALL_OPTION
+    ? Array.from(new Set(Object.values(state.classesByLevel).flat())).sort((a, b) => String(a).localeCompare(String(b), 'th'))
+    : (state.classesByLevel[level] || []);
   return `<option value="" ${selected===''?'selected':''}>ทุกห้อง</option>` + classes.map(c => `<option ${c===selected?'selected':''} value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+}
+function reviewAllLevelOptions(selected='') {
+  return `<option value="">เลือกระดับชั้น</option><option value="${ALL_OPTION}" ${selected===ALL_OPTION?'selected':''}>ทุกระดับชั้น</option>`
+    + state.levels.map(l => `<option ${l===selected?'selected':''} value="${escapeHtml(l)}">${escapeHtml(l)}</option>`).join('');
+}
+function reviewAllAssignmentOptions(level='', selected='') {
+  const arr = state.assignments.filter(a => !level || level === ALL_OPTION || a.Level === level);
+  return `<option value="">เลือกใบงาน</option><option value="${ALL_OPTION}" ${selected===ALL_OPTION?'selected':''}>ทุกงาน</option>`
+    + arr.map(a => `<option ${a.AssignmentID===selected?'selected':''} value="${escapeHtml(a.AssignmentID)}">${escapeHtml(a.Topic)}</option>`).join('');
 }
 function assignmentOptions(level='', selected='') {
   const arr = state.assignments.filter(a => !level || a.Level === level);
@@ -434,9 +446,9 @@ function openCreateAssignment() {
 
 function renderReviewAllPage() {
   $('pageToolbar').innerHTML = `
-    <select onchange="state.selectedLevel=this.value; state.selectedAssignment=''; state.selectedClass=''; clearSelectedSubmissions(false); renderReviewAllPage()">${levelOptions(state.selectedLevel)}</select>
-    <select onchange="state.selectedAssignment=this.value; clearSelectedSubmissions(false); renderReviewAllPage()">${assignmentOptions(state.selectedLevel, state.selectedAssignment)}</select>
-    <select onchange="state.selectedClass=this.value; clearSelectedSubmissions(false); renderReviewAllPage()">${reviewAllClassOptions(state.selectedLevel, state.selectedClass)}</select>
+    <select onchange="state.selectedLevel=this.value; state.selectedAssignment=''; state.selectedClass=''; state.submissions=[]; clearSelectedSubmissions(false); renderReviewAllPage()">${reviewAllLevelOptions(state.selectedLevel)}</select>
+    <select onchange="state.selectedAssignment=this.value; state.submissions=[]; clearSelectedSubmissions(false); renderReviewAllPage()">${reviewAllAssignmentOptions(state.selectedLevel, state.selectedAssignment)}</select>
+    <select onchange="state.selectedClass=this.value; state.submissions=[]; clearSelectedSubmissions(false); renderReviewAllPage()">${reviewAllClassOptions(state.selectedLevel, state.selectedClass)}</select>
     <button onclick="loadSubmissions()">โหลดงาน</button>
     <button onclick="loadSubmissions()">รีเฟรช</button>
     <button class="${state.reviewSelectMode ? 'warn' : ''}" onclick="toggleReviewSelectMode()">${state.reviewSelectMode ? 'ปิดโหมดเลือกหลายงาน' : 'เลือกหลายงาน'}</button>
@@ -456,6 +468,8 @@ function renderBulkReviewToolbar() {
     <button onclick="clearSelectedSubmissions()">ยกเลิกการเลือก</button>
     <button onclick="batchMarkCheckedSelected()">ตรวจแล้ว</button>
     <button onclick="batchFullScoreSelected()">ให้คะแนนเต็ม</button>
+    <input id="bulkReviewScore" class="score-bulk-input" placeholder="คะแนน">
+    <button onclick="batchCustomScoreSelected()">ให้คะแนน</button>
     <button onclick="batchReturnSelected()">ส่งคืนงาน</button>
     <button class="danger" onclick="batchDeleteSelected()">ลบงานที่เลือก</button>
   </div>`;
@@ -506,10 +520,14 @@ async function batchPostSelected(makePayload, successMessage) {
   const ids = selectedSubmissionIds();
   if (!ids.length) return showToast('กรุณาเลือกงานนักเรียนก่อน');
   try {
-    for (const id of ids) {
-      await apiPost(makePayload(id));
+    const payloads = ids.map(id => makePayload(id));
+    showToast(`กำลังดำเนินการ ${ids.length} งาน...`);
+    if (payloads.every(payload => payload.action === 'updateSubmission')) {
+      await apiPost({ action: 'batchUpdateSubmissions', userId: state.user.UserID, updates: payloads });
+    } else {
+      for (const payload of payloads) await apiPost(payload);
     }
-    showToast(successMessage || 'ดำเนินการกับงานที่เลือกแล้ว');
+    showToast(`${successMessage || 'ดำเนินการกับงานที่เลือกแล้ว'} (${ids.length} งาน)`);
     state.selectedSubmissionIds.clear();
     await loadSubmissions();
   } catch (err) { showToast(err.message); }
@@ -527,6 +545,18 @@ function batchFullScoreSelected() {
     const a = s?.assignment || getAssignment(s?.AssignmentID) || {};
     return { action: 'updateSubmission', submissionId: id, userId: state.user.UserID, Score: a.FullScore || '', CheckedStatus: 'ตรวจแล้ว' };
   }, 'ให้คะแนนเต็มกับงานที่เลือกแล้ว');
+}
+
+function batchCustomScoreSelected() {
+  const score = $('bulkReviewScore')?.value ?? '';
+  if (!String(score).trim()) return showToast('กรุณาใส่คะแนนก่อน');
+  batchPostSelected(id => ({
+    action: 'updateSubmission',
+    submissionId: id,
+    userId: state.user.UserID,
+    Score: score,
+    CheckedStatus: 'ตรวจแล้ว'
+  }), 'ให้คะแนนงานที่เลือกแล้ว');
 }
 
 function batchReturnSelected() {
@@ -550,7 +580,9 @@ async function loadSubmissions(extra={}) {
     setLoading('กำลังโหลดงาน...');
     const hideChecked = $('hideChecked') ? $('hideChecked').checked : false;
     const hideGraded = $('hideGraded') ? $('hideGraded').checked : false;
-    const data = await apiGet({ action: 'submissions', assignmentId: state.selectedAssignment, level: state.selectedLevel, className: state.selectedClass, hideChecked, hideGraded, ...extra });
+    const assignmentId = state.selectedAssignment === ALL_OPTION ? '' : state.selectedAssignment;
+    const level = state.selectedLevel === ALL_OPTION ? '' : state.selectedLevel;
+    const data = await apiGet({ action: 'submissions', assignmentId, level, className: state.selectedClass, hideChecked, hideGraded, ...extra });
     state.submissions = data.submissions || [];
     state.selectedSubmissionIds.clear();
     renderSubmissionCards(state.submissions);
@@ -558,6 +590,20 @@ async function loadSubmissions(extra={}) {
 }
 
 function renderSubmissionCards(items) {
+  if (state.currentPage === 'reviewAll' && state.selectedAssignment === ALL_OPTION && items.length) {
+    const groups = {};
+    items.forEach(item => {
+      const level = item.Level || item.assignment?.Level || 'ไม่ระบุระดับชั้น';
+      if (!groups[level]) groups[level] = [];
+      groups[level].push(item);
+    });
+    const levels = Object.keys(groups).sort((a, b) => String(a).localeCompare(String(b), 'th', { numeric: true }));
+    $('content').innerHTML = levels.map(level => `<section class="review-level-group">
+      <h2 class="review-level-heading">ระดับชั้น ${escapeHtml(level)} <span>${groups[level].length} งานส่ง</span></h2>
+      <div class="card-list">${groups[level].map(renderSubmissionCard).join('')}</div>
+    </section>`).join('');
+    return;
+  }
   $('content').innerHTML = `<div class="card-list">${items.map(renderSubmissionCard).join('') || '<div class="hero-empty">ไม่พบงานที่ส่ง</div>'}</div>`;
 }
 
