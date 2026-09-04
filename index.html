@@ -130,6 +130,14 @@
     .student-preview-note { border: 1px dashed var(--line); color: var(--muted); padding: 10px; background: rgba(0,0,0,.25); }
     .issue { border-left: 4px solid var(--warning); padding: 8px 10px; margin: 6px 0; background: rgba(250,204,21,.1); }
     .issue.error { border-left-color: var(--danger); background: rgba(239,68,68,.15); }
+    .group-warning { border: 2px solid #b45309; background: #fef3c7; color: #451a03; padding: 10px 12px; font-weight: 800; }
+    .individual-score-panel { border: 1px solid #334155; background: #f8fafc; padding: 10px; }
+    .individual-score-panel summary { cursor: pointer; font-weight: 900; margin-bottom: 10px; }
+    .individual-score-head, .individual-score-row { display: grid; grid-template-columns: minmax(140px,1.5fr) repeat(3,minmax(90px,1fr)) minmax(130px,1.4fr); gap: 6px; align-items: center; margin-bottom: 6px; }
+    .individual-score-head { font-size: 12px; font-weight: 900; color: #334155; }
+    .individual-score-row small { display: block; color: #64748b; }
+    .individual-score-row input, .individual-score-row select { min-width: 0; width: 100%; }
+    .sync-list { margin-top: 10px; max-height: 260px; overflow: auto; }
 
     .toast { position: fixed; right: 18px; bottom: 18px; max-width: 460px; background: #001805; color: var(--line); border: var(--border); padding: 14px 18px; z-index: 200; display: none; }
     .toast.show { display: block; }
