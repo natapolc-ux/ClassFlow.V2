@@ -627,6 +627,7 @@ function renderSubmissionCard(s) {
       <div>สถานะ <span class="status-pill">${escapeHtml(s.CheckedStatus || 'ยังไม่ตรวจ')}</span> <span class="status-pill">${escapeHtml(s.LateStatus || '')}</span></div>
       <label>คะแนน <input id="score_${s.SubmissionID}" class="score-input" value="${escapeHtml(s.Score || '')}" placeholder="คะแนน"></label>
       <label>หมายเหตุครู <textarea id="note_${s.SubmissionID}">${escapeHtml(s.TeacherNote || '')}</textarea></label>
+      ${renderIndividualGroupScorePanel(s)}
       <div class="detail-actions">
         <button onclick="saveScore('${s.SubmissionID}')">บันทึกคะแนน</button>
         <button onclick="markChecked('${s.SubmissionID}')">ตรวจแล้ว</button>
@@ -636,6 +637,75 @@ function renderSubmissionCard(s) {
       </div>
     </div>
   </article>`;
+}
+
+function parsedIndividualScores(s) {
+  try { return JSON.parse(s?.IndividualScores || '{}') || {}; } catch (err) { return {}; }
+}
+
+function renderIndividualGroupScorePanel(s) {
+  if (String(s.SubmitMode || '') !== 'กลุ่ม') return '';
+  const ids = csv(s.MemberIDs);
+  const names = csv(s.MemberNames);
+  const saved = parsedIndividualScores(s);
+  if (!ids.length) return '<div class="group-warning">งานกลุ่มนี้ยังไม่มีรหัสสมาชิก กรุณาซิงก์ข้อมูลกลุ่มก่อน</div>';
+  const rows = ids.map((id, index) => {
+    const item = saved[id] || {};
+    const participation = item.participation || 'ปกติ';
+    return `<div class="individual-score-row" data-student-id="${escapeHtml(id)}">
+      <div><b>${escapeHtml(names[index] || id)}</b><small>${escapeHtml(id)}</small></div>
+      <select class="member-participation">
+        ${['มาก','ปกติ','น้อย'].map(value => `<option ${participation===value?'selected':''}>${value}</option>`).join('')}
+      </select>
+      <input class="member-adjustment" type="number" step="0.01" value="${escapeHtml(item.adjustment ?? 0)}" placeholder="ปรับ +/-" oninput="updateIndividualFinalPreview(this)">
+      <input class="member-final-score" type="number" step="0.01" value="${escapeHtml(item.finalScore ?? '')}" placeholder="คะแนนสุดท้าย">
+      <input class="member-score-note" value="${escapeHtml(item.note || '')}" placeholder="หมายเหตุรายคน">
+    </div>`;
+  }).join('');
+  return `<details class="individual-score-panel">
+    <summary>คะแนนรายบุคคลตามการมีส่วนร่วม</summary>
+    <div class="individual-score-head"><span>สมาชิก</span><span>การมีส่วนร่วม</span><span>ปรับคะแนน</span><span>คะแนนสุดท้าย</span><span>หมายเหตุ</span></div>
+    <div id="individual_${escapeHtml(s.SubmissionID)}">${rows}</div>
+    <button onclick="saveIndividualGroupScores('${escapeHtml(s.SubmissionID)}')">บันทึกคะแนนรายบุคคล</button>
+  </details>`;
+}
+
+function updateIndividualFinalPreview(input) {
+  const row = input.closest('.individual-score-row');
+  const card = input.closest('.layout-card');
+  if (!row || !card) return;
+  const scoreInput = card.querySelector('.score-input');
+  const finalInput = row.querySelector('.member-final-score');
+  const groupScore = Number(scoreInput?.value || 0);
+  const adjustment = Number(input.value || 0);
+  if (finalInput) finalInput.value = groupScore + adjustment;
+}
+
+async function saveIndividualGroupScores(submissionId) {
+  const container = $(`individual_${submissionId}`);
+  if (!container) return;
+  const groupScore = $(`score_${submissionId}`)?.value || '';
+  if (!String(groupScore).trim()) return showToast('กรุณาใส่คะแนนกลุ่มก่อน');
+  const members = Array.from(container.querySelectorAll('.individual-score-row')).map(row => ({
+    studentId: row.dataset.studentId || '',
+    participation: row.querySelector('.member-participation')?.value || 'ปกติ',
+    adjustment: row.querySelector('.member-adjustment')?.value || 0,
+    finalScore: row.querySelector('.member-final-score')?.value || '',
+    note: row.querySelector('.member-score-note')?.value || ''
+  }));
+  try {
+    showToast('กำลังบันทึกคะแนนรายบุคคล...');
+    await apiPost({
+      action: 'saveIndividualGroupScores',
+      submissionId,
+      userId: state.user.UserID,
+      groupScore,
+      teacherNote: $(`note_${submissionId}`)?.value || '',
+      members
+    });
+    showToast('บันทึกคะแนนรายบุคคลแล้ว');
+    await loadSubmissions(getReviewSearchParams());
+  } catch (err) { showToast(err.message); }
 }
 
 function toggleSubmissionPreview(id) {
@@ -941,6 +1011,15 @@ function renderSettingsPage() {
         </div>
       </div>
       <div class="system-card">
+        <h3>ตรวจสอบและซิงก์ข้อมูลงานกลุ่ม</h3>
+        <p>จับคู่งานส่งด้วย GroupID หรือชุด MemberIDs แล้วปรับชื่อกลุ่ม ชื่อสมาชิก และข้อมูลผู้ส่งให้ตรงกับระบบปัจจุบัน</p>
+        <div class="detail-actions">
+          <button onclick="previewGroupSync()">ตรวจสอบก่อนซิงก์</button>
+          <button onclick="applyGroupSync()">ยืนยันการซิงก์</button>
+        </div>
+        <div id="groupSyncResult" class="student-preview-note">ยังไม่ได้ตรวจสอบข้อมูลงานกลุ่ม</div>
+      </div>
+      <div class="system-card">
         <h3>ตรวจสอบข้อมูลชีต</h3>
         <div id="checkResult">กดปุ่มตรวจสอบข้อมูลชีตด้านบน</div>
       </div>
@@ -949,6 +1028,40 @@ function renderSettingsPage() {
         <p>เปิดจากเมนูซ้าย เพื่อดูตัวอย่างหน้าที่นักเรียนเห็น โดยเลือกชั้น ห้อง และชื่อนักเรียน</p>
       </div>
     </div>`;
+}
+
+function renderGroupSyncResult(data) {
+  const box = $('groupSyncResult');
+  if (!box) return;
+  const changes = data.changes || [];
+  const issues = data.issues || [];
+  box.innerHTML = `<div><b>รายการที่ตรวจทั้งหมด:</b> ${escapeHtml(data.total || 0)}</div>
+    <div><b>งานกลุ่ม:</b> ${escapeHtml(data.groupTotal || 0)} | <b>งานเก่าที่นำเข้า:</b> ${escapeHtml(data.legacyTotal || 0)}</div>
+    <div><b>จับคู่กลุ่มได้:</b> ${escapeHtml(data.matched || 0)}</div>
+    <div><b>รายการที่จะปรับ/ปรับแล้ว:</b> ${escapeHtml(data.changed || 0)}</div>
+    <div><b>จับคู่ไม่ได้:</b> ${escapeHtml(data.unmatched || 0)}</div>
+    ${changes.length ? `<div class="sync-list"><b>ตัวอย่างรายการเปลี่ยนแปลง</b>${changes.slice(0,20).map(x => `<div>${escapeHtml(x.submissionId)}: ${escapeHtml(x.oldGroupName || '-')} → ${escapeHtml(x.newGroupName || '-')} (${escapeHtml(x.fields)})</div>`).join('')}</div>` : ''}
+    ${issues.length ? `<div class="issue"><b>รายการที่ต้องตรวจเอง</b>${issues.slice(0,20).map(x => `<div>${escapeHtml(x.submissionId)}: ${escapeHtml(x.detail)}</div>`).join('')}</div>` : ''}`;
+}
+
+async function previewGroupSync() {
+  try {
+    $('groupSyncResult').textContent = 'กำลังตรวจสอบโดยยังไม่แก้ข้อมูล...';
+    const data = await apiGet({ action: 'groupSyncPreview' });
+    renderGroupSyncResult(data);
+    showToast('ตรวจสอบข้อมูลงานกลุ่มแล้ว');
+  } catch (err) { showToast(err.message); }
+}
+
+async function applyGroupSync() {
+  if (!confirm('ยืนยันซิงก์ชื่อกลุ่ม สมาชิก และข้อมูลผู้ส่งตามรายการที่ตรวจสอบหรือไม่')) return;
+  try {
+    $('groupSyncResult').textContent = 'กำลังซิงก์ข้อมูลงานกลุ่ม...';
+    const data = await apiPost({ action: 'applyGroupSync', userId: state.user.UserID });
+    renderGroupSyncResult(data);
+    await refreshBootstrap(false);
+    showToast('ซิงก์ข้อมูลงานกลุ่มแล้ว');
+  } catch (err) { showToast(err.message); }
 }
 
 function themeSwatch(color) {
@@ -1063,7 +1176,8 @@ async function loadStudentWork(returnedOnly=false) {
 function renderStudentWorkCard(w) {
   const a = w.assignment;
   const s = w.submission;
-  const canSubmit = a.Status === 'เปิดใช้งาน';
+  const groupMissing = a.WorkType === 'งานกลุ่ม' && !w.group;
+  const canSubmit = a.Status === 'เปิดใช้งาน' && !groupMissing;
   const left = s ? renderWorkOrAssignmentPreview(s, a) : renderStudentAssignmentPreview(w);
   const previewId = `studentWorkPreview_${a.AssignmentID}`;
   return `<article class="layout-card">
@@ -1076,12 +1190,13 @@ function renderStudentWorkCard(w) {
       <h3>${escapeHtml(a.Topic)}</h3>
       <div>คะแนนเต็ม ${escapeHtml(a.FullScore || '-')} | สถานะงาน <span class="status-pill">${escapeHtml(a.Status || '')}</span></div>
       <div>ประเภท: ${escapeHtml(a.WorkType)} | รูปแบบคำสั่ง: ${escapeHtml(assignmentInstructionType(a))} ${w.group ? `<br>กลุ่ม: ${escapeHtml(w.group.GroupName)}<br>สมาชิก: ${escapeHtml(w.group.MemberNames)}` : ''}</div>
+      ${groupMissing ? '<div class="group-warning"><b>ยังไม่ได้จัดกลุ่ม</b><br>กรุณาแจ้งครูก่อนกรอกหรือส่งงาน</div>' : ''}
       <div>สถานะส่ง: <span class="status-pill">${s ? 'ส่งแล้ว' : 'ยังไม่ส่ง'}</span> ${s ? `<span class="status-pill">${escapeHtml(s.CheckedStatus || '')}</span> <span class="status-pill">คะแนน ${escapeHtml(s.Score || '-')}</span>` : ''}</div>
       ${s ? '<div class="submitted-summary"><b>งานที่ส่งแล้วจะแสดงอยู่ฝั่งซ้าย</b></div>' : ''}
       <label>คำตอบ/ข้อความส่งงาน <textarea id="workText_${a.AssignmentID}" ${canSubmit?'':'disabled'}>${escapeHtml(s?.WorkText || '')}</textarea></label>
       <label>แนบไฟล์ <input id="file_${a.AssignmentID}" type="file" multiple ${canSubmit?'':'disabled'}></label>
       <div class="detail-actions">
-        ${canSubmit ? `<button onclick="submitStudentWork('${a.AssignmentID}')">${s ? 'ส่งแก้ไข/ส่งใหม่' : 'ส่งงาน'}</button>` : '<button disabled>งานปิดการใช้งาน</button>'}
+        ${canSubmit ? `<button onclick="submitStudentWork('${a.AssignmentID}')">${s ? 'ส่งแก้ไข/ส่งใหม่' : 'ส่งงาน'}</button>` : `<button disabled>${groupMissing ? 'ยังไม่ได้จัดกลุ่ม' : 'งานปิดการใช้งาน'}</button>`}
         <button onclick="showAssignmentInfo('${a.AssignmentID}')">ดูคำสั่งงาน</button>
         ${materialOpenButton(a)}
       </div>
