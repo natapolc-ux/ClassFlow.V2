@@ -26,7 +26,8 @@ const PAGE_TITLES = {
   scoreTable: 'ตารางคะแนน',
   settings: 'อื่นๆ',
   studentWork: 'งานของฉัน',
-  studentReturned: 'งานที่ถูกส่งคืน'
+  studentReturned: 'งานที่ถูกส่งคืน',
+  studentTheme: 'เปลี่ยนสี'
 };
 
 window.addEventListener('load', restoreSession);
@@ -161,11 +162,16 @@ function renderCurrentPage() {
   if (page === 'settings') return renderSettingsPage();
   if (page === 'studentWork') return renderStudentPage(false);
   if (page === 'studentReturned') return renderStudentPage(true);
+  if (page === 'studentTheme') return renderStudentThemePage();
 }
 
 function syncToolbarHeight() {
   const tb = $('pageToolbar');
-  const h = Math.max(tb.offsetHeight, 80);
+  if (!tb) return;
+  // ล้างค่าความสูงจากหน้าก่อนก่อนวัด ไม่เช่นนั้น min-height เดิมจะทำให้
+  // แถบเครื่องมือหน้าที่มีเนื้อหาน้อยยังคงสูงเกินจำเป็น
+  document.documentElement.style.setProperty('--toolbar-h', '0px');
+  const h = Math.max(tb.scrollHeight, 76);
   document.documentElement.style.setProperty('--toolbar-h', `${h}px`);
 }
 
@@ -1026,6 +1032,37 @@ function renderSettingsPage() {
       <div class="system-card">
         <h3>มุมมองนักเรียน</h3>
         <p>เปิดจากเมนูซ้าย เพื่อดูตัวอย่างหน้าที่นักเรียนเห็น โดยเลือกชั้น ห้อง และชื่อนักเรียน</p>
+      </div>
+    </div>`;
+}
+
+function renderStudentThemePage() {
+  const user = state.user || {};
+  $('pageToolbar').innerHTML = `
+    <button onclick="previewThemeFromForm()">แสดงตัวอย่าง</button>
+    <button onclick="saveThemeSettings()">บันทึกสีของฉัน</button>
+    <button onclick="resetThemeForm()">กลับค่าเริ่มต้น</button>
+  `;
+  syncToolbarHeight();
+  $('content').innerHTML = `
+    <div class="settings-grid">
+      <div class="system-card">
+        <h3>ตกแต่งหน้าของฉัน</h3>
+        <p>สีที่เลือกจะบันทึกเฉพาะบัญชีของนักเรียนคนนี้ ไม่เปลี่ยนสีของครูหรือเพื่อนคนอื่น</p>
+        <div class="theme-form">
+          <div class="theme-row">
+            <label>สีธีมหลัก
+              <input id="themeAccent" type="color" value="${escapeHtml(normalizeHexColor(user.AccentColor || '#22C55E'))}">
+            </label>
+            <label>สีพื้นหลัง
+              <input id="themeBg" type="color" value="${escapeHtml(normalizeHexColor(user.BackgroundColor || '#000000', '#000000'))}">
+            </label>
+          </div>
+          <div class="theme-swatch-list">
+            ${themeSwatch('#22C55E')}${themeSwatch('#38BDF8')}${themeSwatch('#A855F7')}${themeSwatch('#EC4899')}${themeSwatch('#F97316')}${themeSwatch('#FACC15')}${themeSwatch('#EF4444')}
+          </div>
+          <small>กดแสดงตัวอย่างก่อน แล้วกดบันทึกสีของฉันเพื่อใช้สีนี้ในการเข้าสู่ระบบครั้งต่อไป</small>
+        </div>
       </div>
     </div>`;
 }
