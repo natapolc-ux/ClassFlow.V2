@@ -350,7 +350,7 @@ function materialOpenButton(a) {
 function renderAssignmentsPage() {
   $('pageToolbar').innerHTML = `
     <select id="levelFilter" onchange="state.selectedLevel=this.value; state.selectedAssignment=''; renderAssignmentsPage()">${levelOptions(state.selectedLevel)}</select>
-    <select id="assignmentFilter" onchange="state.selectedAssignment=this.value; renderAssignmentsPage()">${assignmentOptions(state.selectedLevel, state.selectedAssignment)}</select>
+    <select id="assignmentFilter" class="toolbar-assignment-select" title="เลือกงาน" onchange="state.selectedAssignment=this.value; renderAssignmentsPage()">${assignmentOptions(state.selectedLevel, state.selectedAssignment)}</select>
     <button onclick="openCreateAssignment()">เพิ่มงาน</button>
     <button onclick="refreshBootstrap()">รีเฟรช</button>
   `;
@@ -453,7 +453,7 @@ function openCreateAssignment() {
 function renderReviewAllPage() {
   $('pageToolbar').innerHTML = `
     <select onchange="state.selectedLevel=this.value; state.selectedAssignment=''; state.selectedClass=''; state.submissions=[]; clearSelectedSubmissions(false); renderReviewAllPage()">${reviewAllLevelOptions(state.selectedLevel)}</select>
-    <select onchange="state.selectedAssignment=this.value; state.submissions=[]; clearSelectedSubmissions(false); renderReviewAllPage()">${reviewAllAssignmentOptions(state.selectedLevel, state.selectedAssignment)}</select>
+    <select class="toolbar-assignment-select" title="เลือกงาน — รายการเมื่อเปิดจะแสดงชื่อเต็ม" onchange="state.selectedAssignment=this.value; state.submissions=[]; clearSelectedSubmissions(false); renderReviewAllPage()">${reviewAllAssignmentOptions(state.selectedLevel, state.selectedAssignment)}</select>
     <select onchange="state.selectedClass=this.value; state.submissions=[]; clearSelectedSubmissions(false); renderReviewAllPage()">${reviewAllClassOptions(state.selectedLevel, state.selectedClass)}</select>
     <button onclick="loadSubmissions()">โหลดงาน</button>
     <button onclick="loadSubmissions()">รีเฟรช</button>
