@@ -10,6 +10,8 @@ const state = {
   selectedLevel: '',
   selectedClass: '',
   selectedAssignment: '',
+  individualLevel: '',
+  individualClass: '',
   selectedPreviewStudent: '',
   submissions: [],
   reviewSelectMode: false,
@@ -458,13 +460,28 @@ function renderReviewAllPage() {
     <button onclick="loadSubmissions()">โหลดงาน</button>
     <button onclick="loadSubmissions()">รีเฟรช</button>
     <button class="${state.reviewSelectMode ? 'warn' : ''}" onclick="toggleReviewSelectMode()">${state.reviewSelectMode ? 'ปิดโหมดเลือกหลายงาน' : 'เลือกหลายงาน'}</button>
-    <label style="display:flex;align-items:center;gap:8px;color:white;"><input id="hideChecked" type="checkbox" checked> ซ่อนงานที่ตรวจแล้ว</label>
-    <label style="display:flex;align-items:center;gap:8px;color:white;"><input id="hideGraded" type="checkbox"> ซ่อนงานที่ให้คะแนนแล้ว</label>
+    <button class="toolbar-gear-btn" title="ตัวเลือกการแสดงงาน" aria-label="ตัวเลือกการแสดงงาน" aria-expanded="false" onclick="toggleReviewFilterOptions(this)">⚙</button>
+    <div id="reviewFilterOptions" class="review-filter-options hidden">
+      <label><input id="hideChecked" type="checkbox" checked> ซ่อนงานที่ตรวจแล้ว</label>
+      <label><input id="hideGraded" type="checkbox"> ซ่อนงานที่ให้คะแนนแล้ว</label>
+    </div>
     ${state.reviewSelectMode ? renderBulkReviewToolbar() : ''}
   `;
   syncToolbarHeight();
   if (!state.submissions.length) $('content').innerHTML = '<div class="hero-empty">เลือกเงื่อนไขแล้วกดโหลดงาน</div>';
   else renderSubmissionCards(state.submissions);
+}
+
+function toggleReviewFilterOptions(button) {
+  const options = $('reviewFilterOptions');
+  if (!options) return;
+  const opening = options.classList.contains('hidden');
+  options.classList.toggle('hidden', !opening);
+  if (button) {
+    button.classList.toggle('warn', opening);
+    button.setAttribute('aria-expanded', opening ? 'true' : 'false');
+  }
+  syncToolbarHeight();
 }
 
 function renderBulkReviewToolbar() {
@@ -751,8 +768,8 @@ async function deleteSubmission(id) {
 
 function renderReviewOnePage() {
   $('pageToolbar').innerHTML = `
-    <select onchange="state.selectedLevel=this.value; state.selectedClass=''; renderReviewOnePage()">${levelOptions(state.selectedLevel)}</select>
-    <select onchange="state.selectedClass=this.value; renderReviewOnePage()">${classOptions(state.selectedLevel, state.selectedClass)}</select>
+    <select onchange="state.individualLevel=this.value; state.individualClass=''; renderReviewOnePage()">${levelOptions(state.individualLevel)}</select>
+    <select onchange="state.individualClass=this.value; renderReviewOnePage()">${classOptions(state.individualLevel, state.individualClass)}</select>
     <input id="personSearch" placeholder="ชื่อ / เลขที่ / รหัส / ชื่อกลุ่ม">
     <button onclick="loadIndividualWork()">ค้นหา</button>
     <button onclick="loadIndividualWork()">รีเฟรช</button>
@@ -761,12 +778,29 @@ function renderReviewOnePage() {
   $('content').innerHTML = '<div class="hero-empty">เลือกห้อง แล้วค้นหานักเรียนหรือกลุ่ม</div>';
 }
 function getReviewSearchParams() {
-  return { search: $('personSearch')?.value || '' };
+  if (state.currentPage === 'reviewOne') {
+    return {
+      assignmentId: '',
+      level: state.individualLevel,
+      className: state.individualClass,
+      hideChecked: false,
+      hideGraded: false,
+      search: $('personSearch')?.value || ''
+    };
+  }
+  return {};
 }
 async function loadIndividualWork() {
   const search = $('personSearch')?.value || '';
-  if (!state.selectedLevel || !state.selectedClass || !search.trim()) return showToast('กรุณาเลือกระดับชั้น ห้อง และคำค้นหา');
-  await loadSubmissions({ search });
+  if (!state.individualLevel || !state.individualClass || !search.trim()) return showToast('กรุณาเลือกระดับชั้น ห้อง และคำค้นหา');
+  await loadSubmissions({
+    assignmentId: '',
+    level: state.individualLevel,
+    className: state.individualClass,
+    hideChecked: false,
+    hideGraded: false,
+    search
+  });
 }
 
 function renderStudentViewPage() {
