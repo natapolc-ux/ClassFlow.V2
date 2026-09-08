@@ -1080,6 +1080,10 @@ async function loadDuplicateSubmissions() {
 }
 
 function renderDuplicateGroup(group) {
+  const assignment = group.submissions?.[0]?.assignment || {};
+  const worksheet = hasWorksheetFile(assignment)
+    ? drivePreview(assignment.WorksheetURL, 'ใบงาน')
+    : renderInstructionText(assignment, 'ยังไม่มีใบงานหรือคำสั่งงาน');
   const entries = (group.submissions || []).map((submission, index) => {
     const files = getSubmissionFileUrls(submission);
     return `<div class="duplicate-entry">
@@ -1098,7 +1102,13 @@ function renderDuplicateGroup(group) {
     <h3>${escapeHtml(group.topic || group.assignmentId)}</h3>
     <div>${escapeHtml(group.level || '')} / ${escapeHtml(group.className || '')} — ${escapeHtml(group.owner || '')} — พบ ${escapeHtml(group.count || 0)} รายการ</div>
     <div class="student-preview-note">ตรวจสอบวันที่ ไฟล์ คะแนน และสถานะก่อนเลือกลบ ระบบจะไม่ลบรายการใดให้อัตโนมัติ</div>
-    ${entries}
+    <div class="duplicate-group-body">
+      <div class="duplicate-worksheet">
+        <h4>ใบงาน/คำสั่งงานต้นฉบับ</h4>
+        <div class="work-preview">${worksheet}</div>
+      </div>
+      <div class="duplicate-entries">${entries}</div>
+    </div>
   </section>`;
 }
 
