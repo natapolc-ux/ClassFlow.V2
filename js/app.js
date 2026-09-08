@@ -547,14 +547,20 @@ async function batchPostSelected(makePayload, successMessage) {
   try {
     const payloads = ids.map(id => makePayload(id));
     showToast(`กำลังดำเนินการ ${ids.length} งาน...`);
+    let data = null;
     if (payloads.every(payload => payload.action === 'updateSubmission')) {
-      await apiPost({ action: 'batchUpdateSubmissions', userId: state.user.UserID, updates: payloads });
+      data = await apiPost({ action: 'batchUpdateSubmissions', userId: state.user.UserID, updates: payloads });
     } else {
       for (const payload of payloads) await apiPost(payload);
     }
     showToast(`${successMessage || 'ดำเนินการกับงานที่เลือกแล้ว'} (${ids.length} งาน)`);
     state.selectedSubmissionIds.clear();
-    await loadSubmissions();
+    if (data?.results) {
+      data.results.forEach(result => applySavedSubmission(result.submission));
+      updateBulkSelectedCount();
+    } else {
+      await loadSubmissions();
+    }
   } catch (err) { showToast(err.message); }
 }
 
@@ -636,7 +642,7 @@ function renderSubmissionCard(s) {
   const a = s.assignment || getAssignment(s.AssignmentID) || {};
   const left = renderWorkOrAssignmentPreview(s, a);
   const selected = state.selectedSubmissionIds.has(String(s.SubmissionID));
-  return `<article class="layout-card ${state.reviewSelectMode ? 'select-mode' : ''}" data-submission="${escapeHtml(s.SubmissionID)}">
+  return `<article id="submissionCard_${escapeHtml(s.SubmissionID)}" class="layout-card ${state.reviewSelectMode ? 'select-mode' : ''}" data-submission="${escapeHtml(s.SubmissionID)}">
     ${state.reviewSelectMode ? `<label class="submission-select"><input class="submission-select-checkbox" type="checkbox" value="${escapeHtml(s.SubmissionID)}" ${selected ? 'checked' : ''} onchange="toggleSubmissionSelection('${escapeHtml(s.SubmissionID)}', this.checked)"> เลือกงานนี้</label>` : ''}
     <div class="card-icons">
       <button class="icon-btn" title="แสดง/ซ่อนงาน" onclick="toggleSubmissionPreview('${s.SubmissionID}')">👁</button>
@@ -662,6 +668,44 @@ function renderSubmissionCard(s) {
       </div>
     </div>
   </article>`;
+}
+
+function submissionShouldBeHidden(submission) {
+  if (state.currentPage !== 'reviewAll') return false;
+  const hasScore = String(submission?.Score ?? '').trim() !== '';
+  const checked = String(submission?.CheckedStatus || '') === 'ตรวจแล้ว' || hasScore;
+  return ($('hideChecked')?.checked && checked) || ($('hideGraded')?.checked && hasScore);
+}
+
+function refreshVisibleReviewCounts() {
+  document.querySelectorAll('.review-level-group').forEach(section => {
+    const count = section.querySelectorAll('.layout-card[data-submission]').length;
+    const label = section.querySelector('.review-level-heading span');
+    if (label) label.textContent = `${count} งานส่ง`;
+    if (!count) section.remove();
+  });
+}
+
+function applySavedSubmission(saved, options={}) {
+  if (!saved?.SubmissionID) return;
+  const id = String(saved.SubmissionID);
+  const index = state.submissions.findIndex(item => String(item.SubmissionID) === id);
+  const current = index >= 0 ? state.submissions[index] : {};
+  const merged = { ...current, ...saved, assignment: saved.assignment || current.assignment };
+  const card = $(`submissionCard_${id}`);
+  if (submissionShouldBeHidden(merged)) {
+    if (index >= 0) state.submissions.splice(index, 1);
+    if (card) card.remove();
+    refreshVisibleReviewCounts();
+    if (!state.submissions.length) $('content').innerHTML = '<div class="hero-empty">ไม่พบงานที่ส่งตามตัวกรองนี้</div>';
+    return;
+  }
+  if (index >= 0) state.submissions[index] = merged;
+  else state.submissions.push(merged);
+  if (!card) return;
+  const individualWasOpen = options.reopenIndividual || !!card.querySelector('.individual-score-panel[open]');
+  card.outerHTML = renderSubmissionCard(merged);
+  if (individualWasOpen) $(`submissionCard_${id}`)?.querySelector('.individual-score-panel')?.setAttribute('open', '');
 }
 
 function parsedIndividualScores(s) {
@@ -720,7 +764,7 @@ async function saveIndividualGroupScores(submissionId) {
   }));
   try {
     showToast('กำลังบันทึกคะแนนรายบุคคล...');
-    await apiPost({
+    const data = await apiPost({
       action: 'saveIndividualGroupScores',
       submissionId,
       userId: state.user.UserID,
@@ -729,7 +773,7 @@ async function saveIndividualGroupScores(submissionId) {
       members
     });
     showToast('บันทึกคะแนนรายบุคคลแล้ว');
-    await loadSubmissions(getReviewSearchParams());
+    applySavedSubmission(data.submission, { reopenIndividual: true });
   } catch (err) { showToast(err.message); }
 }
 
@@ -748,9 +792,9 @@ function togglePreviewBox(id) {
 function fillFullScore(submissionId, fullScore) { const el=$(`score_${submissionId}`); if (el) el.value = fullScore; }
 async function saveScore(id, extra={}) {
   try {
-    await apiPost({ action: 'updateSubmission', submissionId: id, userId: state.user.UserID, Score: $(`score_${id}`)?.value || '', TeacherNote: $(`note_${id}`)?.value || '', ...extra });
+    const data = await apiPost({ action: 'updateSubmission', submissionId: id, userId: state.user.UserID, Score: $(`score_${id}`)?.value || '', TeacherNote: $(`note_${id}`)?.value || '', ...extra });
     showToast('บันทึกแล้ว');
-    if (state.currentPage === 'reviewAll' || state.currentPage === 'reviewOne') await loadSubmissions(getReviewSearchParams());
+    applySavedSubmission(data.submission);
   } catch (err) { showToast(err.message); }
 }
 function markChecked(id) { saveScore(id, { CheckedStatus: 'ตรวจแล้ว' }); }
@@ -971,6 +1015,34 @@ function toggleScoreColumn(assignmentId, checked) {
 function getScoreAssignment(assignmentId) {
   return (state.scoreTable?.assignments || []).find(a => String(a.AssignmentID) === String(assignmentId)) || getAssignment(assignmentId) || {};
 }
+
+function individualScoreForStudent(submission, studentId) {
+  const individual = parsedIndividualScores(submission)[String(studentId || '')];
+  if (individual && String(individual.finalScore ?? '').trim() !== '') return individual.finalScore;
+  return submission?.Score ?? '';
+}
+
+function applySavedSubmissionToScoreTable(submission) {
+  if (!submission?.SubmissionID || !state.scoreTable) return;
+  const id = String(submission.SubmissionID);
+  (state.scoreTable.rows || []).forEach(row => {
+    (row.cells || []).forEach(cell => {
+      if (String(cell.submissionId || '') !== id) return;
+      cell.score = individualScoreForStudent(submission, row.user?.UserID);
+      cell.checkedStatus = submission.CheckedStatus || (String(cell.score).trim() ? 'ตรวจแล้ว' : 'ยังไม่ตรวจ');
+    });
+  });
+  document.querySelectorAll(`.score-cell[data-submission-id="${CSS.escape(id)}"]`).forEach(cellEl => {
+    const rowEl = cellEl.closest('tr');
+    const studentId = rowEl ? String((state.scoreTable.rows || [])[rowEl.rowIndex - 1]?.user?.UserID || '') : '';
+    const score = individualScoreForStudent(submission, studentId);
+    const box = cellEl.querySelector('.score-value-box');
+    if (box) box.innerHTML = scoreCellDisplay({ score, checkedStatus: submission.CheckedStatus });
+    const checkbox = cellEl.querySelector('.score-cell-check');
+    if (checkbox) checkbox.checked = false;
+  });
+}
+
 async function batchUpdateScoreCells(makePayload, successMessage) {
   const selected = getSelectedScoreCells();
   if (!selected.length) return showToast('กรุณาเลือกช่องคะแนนก่อน');
@@ -979,9 +1051,12 @@ async function batchUpdateScoreCells(makePayload, successMessage) {
     buttons.forEach(button => button.disabled = true);
     showToast(`กำลังบันทึก ${selected.length} ช่อง...`);
     const updates = selected.map(item => makePayload(item));
-    await apiPost({ action: 'batchUpdateSubmissions', userId: state.user.UserID, updates });
+    const data = await apiPost({ action: 'batchUpdateSubmissions', userId: state.user.UserID, updates });
     showToast(`${successMessage || 'บันทึกคะแนนแล้ว'} (${selected.length} ช่อง)`);
-    await loadScoreTable();
+    (data.results || []).forEach(result => applySavedSubmissionToScoreTable(result.submission));
+    document.querySelectorAll('.score-col-check').forEach(cb => cb.checked = false);
+    updateScoreSelectedCount();
+    buttons.forEach(button => button.disabled = false);
   } catch (err) {
     showToast('บันทึกไม่สำเร็จ: ' + err.message);
     buttons.forEach(button => button.disabled = false);
