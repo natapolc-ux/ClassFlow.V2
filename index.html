@@ -146,6 +146,12 @@
     .duplicate-list { display: grid; gap: 18px; padding: 24px; }
     .duplicate-group { border: var(--border); background: rgba(0,0,0,.78); padding: 18px; display: grid; gap: 14px; }
     .duplicate-group h3 { margin: 0; color: var(--line); }
+    .duplicate-group-body { display: grid; grid-template-columns: minmax(320px,420px) minmax(0,1fr); gap: 18px; align-items: start; }
+    .duplicate-worksheet { display: grid; gap: 8px; position: sticky; top: calc(var(--header-h) + var(--toolbar-h) + 12px); }
+    .duplicate-worksheet h4 { margin: 0; color: #fff; }
+    .duplicate-worksheet .work-preview { width: 100%; min-height: 300px; }
+    .duplicate-worksheet .work-preview iframe, .duplicate-worksheet .work-preview img { height: 280px; }
+    .duplicate-entries { display: grid; gap: 12px; }
     .duplicate-entry { border: 1px solid rgba(var(--accent-rgb),.55); background: rgba(255,255,255,.08); padding: 14px; display: grid; grid-template-columns: minmax(240px,1fr) auto; gap: 16px; align-items: center; }
     .duplicate-entry-info { display: grid; gap: 5px; }
     .duplicate-entry-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
@@ -159,6 +165,8 @@
       .layout-card { grid-template-columns: 1fr; gap: 24px; padding: 46px 20px; }
       .work-preview, .detail-panel { width: min(640px, 100%); }
       .page-toolbar .toolbar-assignment-select { width: min(100%, 440px); min-width: 220px; }
+      .duplicate-group-body { grid-template-columns: 1fr; }
+      .duplicate-worksheet { position: static; }
     }
   </style>
 </head>
