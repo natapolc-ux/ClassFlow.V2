@@ -143,6 +143,12 @@
     .individual-score-row small { display: block; color: #64748b; }
     .individual-score-row input, .individual-score-row select { min-width: 0; width: 100%; }
     .sync-list { margin-top: 10px; max-height: 260px; overflow: auto; }
+    .duplicate-list { display: grid; gap: 18px; padding: 24px; }
+    .duplicate-group { border: var(--border); background: rgba(0,0,0,.78); padding: 18px; display: grid; gap: 14px; }
+    .duplicate-group h3 { margin: 0; color: var(--line); }
+    .duplicate-entry { border: 1px solid rgba(var(--accent-rgb),.55); background: rgba(255,255,255,.08); padding: 14px; display: grid; grid-template-columns: minmax(240px,1fr) auto; gap: 16px; align-items: center; }
+    .duplicate-entry-info { display: grid; gap: 5px; }
+    .duplicate-entry-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 
     .toast { position: fixed; right: 18px; bottom: 18px; max-width: 460px; background: #001805; color: var(--line); border: var(--border); padding: 14px 18px; z-index: 200; display: none; }
     .toast.show { display: block; }
@@ -176,6 +182,7 @@
         <button class="nav-btn" data-page="reviewAll" onclick="switchPage('reviewAll')"><span class="nav-icon">📝</span><span class="nav-label">ตรวจงานรวม</span></button>
         <button class="nav-btn" data-page="scoreTable" onclick="switchPage('scoreTable')"><span class="nav-icon">📊</span><span class="nav-label">ตารางคะแนน</span></button>
         <button class="nav-btn" data-page="reviewOne" onclick="switchPage('reviewOne')"><span class="nav-icon">👥</span><span class="nav-label">ตรวจงานรายบุคคล</span></button>
+        <button class="nav-btn" data-page="duplicates" onclick="switchPage('duplicates')"><span class="nav-icon">♻️</span><span class="nav-label">จัดการงานซ้ำ</span></button>
         <button class="nav-btn" data-page="studentView" onclick="switchPage('studentView')"><span class="nav-icon">🎒</span><span class="nav-label">มุมมองนักเรียน</span></button>
         <button class="nav-btn" data-page="settings" onclick="switchPage('settings')"><span class="nav-icon">⋯</span><span class="nav-label">อื่นๆ</span></button>
       </div>
