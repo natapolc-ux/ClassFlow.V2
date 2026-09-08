@@ -51,7 +51,7 @@
     .app-shell { --sidebar-width: var(--sidebar-full); min-height: 100vh; }
     .app-shell.collapsed { --sidebar-width: var(--sidebar-collapsed); }
     .sidebar { position: fixed; inset: 0 auto 0 0; width: var(--sidebar-width); background: rgba(0,20,7,.95); border-right: var(--border); overflow: hidden; z-index: 50; transition: width .2s ease; }
-    .sidebar-inner { padding-top: var(--header-h); display: grid; gap: 8px; align-content: start; }
+    .sidebar-inner { padding-top: 0; display: grid; gap: 8px; align-content: start; }
     .nav-btn { display: grid; grid-template-columns: 48px 1fr; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 8px 20px; border: 0; border-left: 5px solid transparent; background: transparent; color: var(--line); text-align: left; }
     .nav-btn.active { background: rgba(34,197,94,.18); border-left-color: var(--line); }
     .nav-icon { width: 32px; text-align: center; font-size: 22px; line-height: 1; }
@@ -66,6 +66,10 @@
     .page-toolbar { position: fixed; top: var(--header-h); left: var(--sidebar-width); right: 0; min-height: var(--toolbar-h); border-bottom: var(--border); background: var(--toolbar-bg); border-color: var(--toolbar-border); display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; padding: 16px 24px; z-index: 55; transition: left .2s ease; }
     .page-toolbar input, .page-toolbar select { min-width: 150px; }
     .page-toolbar .toolbar-assignment-select { width: min(440px, 38vw); max-width: 100%; min-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .toolbar-gear-btn { width: 52px; min-height: 52px; padding: 0; display: inline-grid; place-items: center; font-size: 24px; }
+    .review-filter-options { width: 100%; display: flex; align-items: center; justify-content: center; gap: 36px; flex-wrap: wrap; }
+    .review-filter-options label { display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 700; }
+    .review-filter-options input { width: 34px; height: 34px; min-width: 34px; min-height: 34px; accent-color: var(--accent); }
     .content { margin-left: var(--sidebar-width); padding-top: calc(var(--header-h) + var(--toolbar-h)); min-height: 100vh; transition: margin-left .2s ease; }
     .content-inner { padding: 0; }
 
