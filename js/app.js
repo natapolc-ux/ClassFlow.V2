@@ -24,6 +24,7 @@ const PAGE_TITLES = {
   assignments: 'คำสั่งงาน',
   reviewAll: 'ตรวจงานรวม',
   reviewOne: 'ตรวจงานรายบุคคล',
+  duplicates: 'จัดการงานซ้ำ',
   studentView: 'มุมมองนักเรียน',
   scoreTable: 'ตารางคะแนน',
   settings: 'อื่นๆ',
@@ -159,6 +160,7 @@ function renderCurrentPage() {
   if (page === 'assignments') return renderAssignmentsPage();
   if (page === 'reviewAll') return renderReviewAllPage();
   if (page === 'reviewOne') return renderReviewOnePage();
+  if (page === 'duplicates') return renderDuplicateManagerPage();
   if (page === 'studentView') return renderStudentViewPage();
   if (page === 'scoreTable') return renderScoreTablePage();
   if (page === 'settings') return renderSettingsPage();
@@ -1006,8 +1008,6 @@ function renderSettingsPage() {
   $('pageToolbar').innerHTML = `
     <button onclick="previewThemeFromForm()">แสดงตัวอย่างธีม</button>
     <button onclick="saveThemeSettings()">บันทึกธีมบัญชี</button>
-    <button onclick="resetThemeForm()">กลับค่าเริ่มต้น</button>
-    <button onclick="runSystemCheck()">ตรวจสอบข้อมูลชีต</button>
   `;
   syncToolbarHeight();
   $('content').innerHTML = `
@@ -1059,15 +1059,57 @@ function renderSettingsPage() {
         </div>
         <div id="groupSyncResult" class="student-preview-note">ยังไม่ได้ตรวจสอบข้อมูลงานกลุ่ม</div>
       </div>
-      <div class="system-card">
-        <h3>ตรวจสอบข้อมูลชีต</h3>
-        <div id="checkResult">กดปุ่มตรวจสอบข้อมูลชีตด้านบน</div>
+    </div>`;
+}
+
+function renderDuplicateManagerPage() {
+  $('pageToolbar').innerHTML = `<button onclick="loadDuplicateSubmissions()">ตรวจหางานซ้ำ</button><button onclick="loadDuplicateSubmissions()">รีเฟรช</button>`;
+  syncToolbarHeight();
+  loadDuplicateSubmissions();
+}
+
+async function loadDuplicateSubmissions() {
+  try {
+    setLoading('กำลังตรวจหางานซ้ำ...');
+    const data = await apiGet({ action: 'duplicateSubmissions' });
+    const groups = data.duplicateGroups || [];
+    $('content').innerHTML = groups.length
+      ? `<div class="duplicate-list">${groups.map(renderDuplicateGroup).join('')}</div>`
+      : '<div class="hero-empty">ไม่พบงานนักเรียนที่ซ้ำกันในระบบ</div>';
+  } catch (err) { showToast(err.message); }
+}
+
+function renderDuplicateGroup(group) {
+  const entries = (group.submissions || []).map((submission, index) => {
+    const files = getSubmissionFileUrls(submission);
+    return `<div class="duplicate-entry">
+      <div class="duplicate-entry-info">
+        <b>${index === 0 ? 'รายการล่าสุด' : 'รายการซ้ำ'} — ${escapeHtml(submission.SubmissionID)}</b>
+        <span>วันที่ส่ง: ${escapeHtml(submission.Timestamp || '-')} | สถานะ: ${escapeHtml(submission.CheckedStatus || 'ยังไม่ตรวจ')} | คะแนน: ${escapeHtml(submission.Score || '-')}</span>
+        <span>ผู้ส่ง: ${escapeHtml(submission.StudentName || '-')} ${submission.GroupName ? `| กลุ่ม: ${escapeHtml(submission.GroupName)}` : ''}</span>
       </div>
-      <div class="system-card">
-        <h3>มุมมองนักเรียน</h3>
-        <p>เปิดจากเมนูซ้าย เพื่อดูตัวอย่างหน้าที่นักเรียนเห็น โดยเลือกชั้น ห้อง และชื่อนักเรียน</p>
+      <div class="duplicate-entry-actions">
+        ${files[0] ? `<button onclick="window.open('${escapeHtml(files[0])}','_blank')">เปิดงาน</button>` : ''}
+        <button class="danger" onclick="deleteDuplicateSubmission('${escapeHtml(submission.SubmissionID)}')">ลบรายการนี้</button>
       </div>
     </div>`;
+  }).join('');
+  return `<section class="duplicate-group">
+    <h3>${escapeHtml(group.topic || group.assignmentId)}</h3>
+    <div>${escapeHtml(group.level || '')} / ${escapeHtml(group.className || '')} — ${escapeHtml(group.owner || '')} — พบ ${escapeHtml(group.count || 0)} รายการ</div>
+    <div class="student-preview-note">ตรวจสอบวันที่ ไฟล์ คะแนน และสถานะก่อนเลือกลบ ระบบจะไม่ลบรายการใดให้อัตโนมัติ</div>
+    ${entries}
+  </section>`;
+}
+
+async function deleteDuplicateSubmission(submissionId) {
+  if (!confirm(`ยืนยันลบงานซ้ำรายการ ${submissionId} หรือไม่\n\nควรเปิดตรวจไฟล์และคะแนนก่อนลบ`)) return;
+  try {
+    showToast('กำลังลบรายการที่เลือก...');
+    await apiPost({ action: 'deleteSubmission', submissionId, userId: state.user.UserID });
+    showToast('ลบรายการแล้ว และปรับตารางคะแนนใหม่แล้ว');
+    await loadDuplicateSubmissions();
+  } catch (err) { showToast(err.message); }
 }
 
 function renderStudentThemePage() {
